@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{cmp::Ordering, error, fmt::Display};
+use std::{cmp::Ordering, error, fmt::Display, ops::Range};
 
 mod char_stream;
 mod lex;
@@ -33,6 +33,10 @@ impl Span {
     pub fn new(start: Position, end: Position) -> Self {
         Self { start, end }
     }
+
+    pub fn range(&self) -> Range<usize> {
+        self.start.offset..self.end.offset
+    }
 }
 
 impl Ord for Span {
@@ -44,6 +48,12 @@ impl Ord for Span {
 impl PartialOrd for Span {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
+    }
+}
+
+impl From<Span> for Range<usize> {
+    fn from(span: Span) -> Range<usize> {
+        span.range()
     }
 }
 
