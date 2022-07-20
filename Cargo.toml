@@ -1,0 +1,7 @@
+[workspace]
+
+members = [
+	"yc-syntax",
+	"yc-minifier",
+	"yc-formatter",
+]
