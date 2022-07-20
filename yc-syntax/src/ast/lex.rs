@@ -160,7 +160,7 @@ impl<'a> Lexer<'a> {
         debug_assert!(self.source.lookahead(LEFT_ACTION_DELIM));
 
         self.source.skip(LEFT_ACTION_DELIM.len());
-        let has_trim_marker = self.source.skip_if(LEFT_TRIM_MARKER);
+        let has_trim_marker = self.source.accept(LEFT_TRIM_MARKER);
         self.state = if self.source.lookahead(LEFT_COMMENT_MARKER) {
             State::InComment
         } else {
@@ -175,7 +175,7 @@ impl<'a> Lexer<'a> {
 
     fn lex_end_of_action(&mut self) -> Result {
         let start = self.source.pos;
-        let has_trim_marker = self.source.skip_if(RIGHT_TRIM_MARKER);
+        let has_trim_marker = self.source.accept(RIGHT_TRIM_MARKER);
         if has_trim_marker && !self.source.lookahead(RIGHT_ACTION_DELIM) {
             return Err(self.error(
                 self.source.span_after(start),
@@ -294,7 +294,7 @@ impl<'a> Lexer<'a> {
         let start = self.source.pos;
         self.source.skip(1);
         let mut content = String::new();
-        while !self.source.at_eof() && !self.source.skip_if('"') {
+        while !self.source.at_eof() && !self.source.accept('"') {
             content.push(self.read_char('"')?);
         }
 
@@ -315,7 +315,7 @@ impl<'a> Lexer<'a> {
         self.source.skip(1);
         let c = self.read_char('\'')?;
 
-        if self.source.skip_if('\'') {
+        if self.source.accept('\'') {
             Ok(self.emit(TokenKind::CharLiteral(c)))
         } else {
             Err(self.error(

@@ -14,7 +14,7 @@ impl<'a> CharStream<'a> {
         }
     }
 
-    pub(crate) fn skip_if(&mut self, pat: impl Pattern<'a>) -> bool {
+    pub(crate) fn accept(&mut self, pat: impl Pattern<'a>) -> bool {
         if self.lookahead(pat) {
             self.skip(pat.len());
             true
