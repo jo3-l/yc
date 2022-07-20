@@ -118,7 +118,7 @@ impl<'a> Pattern<'a> for char {
     }
 }
 
-impl<'a, 'b> Pattern<'a> for &'b [char] {
+impl<'a, 'b, const N: usize> Pattern<'a> for &'b [char; N] {
     fn is_prefix_of(self, haystack: &'a str) -> bool {
         haystack.starts_with(self)
     }
