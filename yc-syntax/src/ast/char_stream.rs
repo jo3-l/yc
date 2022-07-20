@@ -104,7 +104,7 @@ impl<'a, 'b> Pattern<'a> for &'a str {
     }
 
     fn len(self) -> usize {
-        str::len(self)
+        self.chars().count()
     }
 }
 
