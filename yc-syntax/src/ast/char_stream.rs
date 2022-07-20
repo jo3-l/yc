@@ -16,7 +16,7 @@ impl<'a> CharStream<'a> {
 
     pub(crate) fn accept(&mut self, pat: impl Pattern<'a>) -> bool {
         if self.lookahead(pat) {
-            self.skip(pat.len());
+            self.skip(pat.match_len());
             true
         } else {
             false
@@ -95,7 +95,7 @@ impl<'a> CharStream<'a> {
 
 pub(crate) trait Pattern<'a>: Sized + Copy {
     fn is_prefix_of(self, haystack: &'a str) -> bool;
-    fn len(self) -> usize;
+    fn match_len(self) -> usize;
 }
 
 impl<'a, 'b> Pattern<'a> for &'a str {
@@ -103,7 +103,7 @@ impl<'a, 'b> Pattern<'a> for &'a str {
         haystack.starts_with(self)
     }
 
-    fn len(self) -> usize {
+    fn match_len(self) -> usize {
         self.chars().count()
     }
 }
@@ -113,7 +113,7 @@ impl<'a> Pattern<'a> for char {
         haystack.starts_with(self)
     }
 
-    fn len(self) -> usize {
+    fn match_len(self) -> usize {
         1
     }
 }
@@ -123,7 +123,7 @@ impl<'a, 'b> Pattern<'a> for &'b [char] {
         haystack.starts_with(self)
     }
 
-    fn len(self) -> usize {
+    fn match_len(self) -> usize {
         1
     }
 }
