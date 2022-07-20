@@ -248,7 +248,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_variable(&mut self) -> Result {
-        debug_assert!(self.source.lookahead("$"));
+        debug_assert!(self.source.lookahead('$'));
 
         self.source.skip(1);
         let var_name = self.read_identifier_like();
@@ -257,7 +257,7 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_field(&mut self) -> Result {
-        debug_assert!(self.source.lookahead("."));
+        debug_assert!(self.source.lookahead('.'));
 
         self.source.skip(1);
         let field_name = self.read_identifier_like();
@@ -289,12 +289,12 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_string(&mut self) -> Result {
-        debug_assert!(self.source.lookahead("\""));
+        debug_assert!(self.source.lookahead('"'));
 
         let start = self.source.pos;
         self.source.skip(1);
         let mut content = String::new();
-        while !self.source.at_eof() && !self.source.skip_if("\"") {
+        while !self.source.at_eof() && !self.source.skip_if('"') {
             content.push(self.read_char('"')?);
         }
 
@@ -309,13 +309,13 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_char(&mut self) -> Result {
-        debug_assert!(self.source.lookahead("'"));
+        debug_assert!(self.source.lookahead('\''));
 
         let start = self.source.pos;
         self.source.skip(1);
         let c = self.read_char('\'')?;
 
-        if self.source.skip_if("'") {
+        if self.source.skip_if('\'') {
             Ok(self.emit(TokenKind::CharLiteral(c)))
         } else {
             Err(self.error(
@@ -398,12 +398,12 @@ impl<'a> Lexer<'a> {
     }
 
     fn lex_raw_string(&mut self) -> Result {
-        debug_assert!(self.source.lookahead("`"));
+        debug_assert!(self.source.lookahead('`'));
 
         let start = self.source.pos;
         self.source.skip(1);
 
-        let content = self.source.consume_until("`");
+        let content = self.source.consume_until('`');
         if self.source.at_eof() {
             Err(self.error(
                 self.source.span_after(start),

@@ -5,6 +5,7 @@ pub(crate) struct CharStream<'a> {
     pub(crate) pos: Position,
 }
 
+// TODO: should CharStream impl Iterator?
 impl<'a> CharStream<'a> {
     pub(crate) fn new(text: &'a str) -> Self {
         Self {
@@ -13,17 +14,17 @@ impl<'a> CharStream<'a> {
         }
     }
 
-    pub(crate) fn skip_if(&mut self, pattern: &str) -> bool {
-        if self.lookahead(pattern) {
-            self.skip(pattern.len());
+    pub(crate) fn skip_if(&mut self, pat: impl Pattern<'a>) -> bool {
+        if self.lookahead(pat) {
+            self.skip(pat.len());
             true
         } else {
             false
         }
     }
 
-    pub(crate) fn lookahead(&self, pattern: &str) -> bool {
-        self.remaining().starts_with(pattern)
+    pub(crate) fn lookahead(&self, pat: impl Pattern<'a>) -> bool {
+        pat.is_prefix_of(self.remaining())
     }
 
     pub(crate) fn consume_while<P>(&mut self, mut predicate: P) -> String
@@ -38,7 +39,7 @@ impl<'a> CharStream<'a> {
         consumed
     }
 
-    pub(crate) fn consume_until(&mut self, pattern: &str) -> String {
+    pub(crate) fn consume_until(&mut self, pattern: impl Pattern<'a>) -> String {
         let mut consumed = String::new();
         while !self.at_eof() && !self.lookahead(pattern) {
             consumed.push(self.next().unwrap());
@@ -89,5 +90,40 @@ impl<'a> CharStream<'a> {
 
     pub(crate) fn at_eof(&self) -> bool {
         self.offset() >= self.text.len()
+    }
+}
+
+pub(crate) trait Pattern<'a>: Sized + Copy {
+    fn is_prefix_of(self, haystack: &'a str) -> bool;
+    fn len(self) -> usize;
+}
+
+impl<'a, 'b> Pattern<'a> for &'a str {
+    fn is_prefix_of(self, haystack: &'a str) -> bool {
+        haystack.starts_with(self)
+    }
+
+    fn len(self) -> usize {
+        str::len(self)
+    }
+}
+
+impl<'a> Pattern<'a> for char {
+    fn is_prefix_of(self, haystack: &'a str) -> bool {
+        haystack.starts_with(self)
+    }
+
+    fn len(self) -> usize {
+        1
+    }
+}
+
+impl<'a, 'b> Pattern<'a> for &'b [char] {
+    fn is_prefix_of(self, haystack: &'a str) -> bool {
+        haystack.starts_with(self)
+    }
+
+    fn len(self) -> usize {
+        1
     }
 }
