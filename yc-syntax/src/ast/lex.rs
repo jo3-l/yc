@@ -87,7 +87,7 @@ impl<'a> Lexer<'a> {
         Self {
             source: CharStream::new(source),
             state: State::InText,
-            last_token_end: Default::default(),
+            last_token_end: Position::default(),
         }
     }
 
@@ -559,7 +559,7 @@ mod tests {
         fn resolve_pos(text: &str, offset: usize) -> Position {
             text[..offset]
                 .chars()
-                .fold(Default::default(), |pos, c| pos.advance_by(c))
+                .fold(Position::default(), |pos, c| pos.advance_by(c))
         }
 
         Span::new(

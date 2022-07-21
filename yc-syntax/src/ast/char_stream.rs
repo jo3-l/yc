@@ -10,7 +10,7 @@ impl<'a> CharStream<'a> {
     pub(crate) fn new(text: &'a str) -> Self {
         Self {
             text,
-            pos: Default::default(),
+            pos: Position::default(),
         }
     }
 
