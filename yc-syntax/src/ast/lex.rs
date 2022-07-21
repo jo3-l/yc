@@ -107,7 +107,7 @@ impl<'a> Lexer<'a> {
             ':' => {
                 let start = self.source.pos;
                 self.source.skip(1);
-                if self.source.next() == Some('=') {
+                if self.source.accept('"') {
                     Ok(self.emit(TokenKind::Declare))
                 } else {
                     Err(self.error(
