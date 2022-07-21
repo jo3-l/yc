@@ -1,3 +1,5 @@
+use lexical::{format::GO_LITERAL, NumberFormatBuilder};
+
 use crate::ast::{char_stream::CharStream, Error, Position, Span};
 use core::fmt;
 use std::{fmt::Display, result};
@@ -25,11 +27,10 @@ impl Token {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum TokenKind {
-    BoolLiteral(bool),                       // boolean literal
-    ComplexLiteral { real: f64, imag: f64 }, // complex literal
-    CharLiteral(char),                       // character literal
-    FloatLiteral(f64),                       // floating point literal
-    IntLiteral(i64),                         // integer literal
+    BoolLiteral(bool), // boolean literal
+    CharLiteral(char), // character literal
+    FloatLiteral(f64), // floating point literal
+    IntLiteral(i64),   // integer literal
 
     Assign,                                     // equals ('=') introducing an assignment
     Comma,                                      // comma (','), used in range action
@@ -415,8 +416,65 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    // TODO: support complex literals?
     fn lex_numeric_literal(&mut self) -> Result {
-        todo!()
+        let start = self.source.pos;
+        self.source.accept(&['+', '-']);
+        let base = if self.source.accept('0') {
+            if self.source.accept(&['x', 'X']) {
+                NumberBase::Hex
+            } else if self.source.accept(&['o', 'O']) {
+                NumberBase::Octal
+            } else if self.source.accept(&['b', 'B']) {
+                NumberBase::Binary
+            } else {
+                NumberBase::Decimal
+            }
+        } else {
+            NumberBase::Decimal
+        };
+
+        self.skip_digits(base);
+        let has_decimal_point = self.source.accept('.');
+        if has_decimal_point {
+            self.skip_digits(NumberBase::Decimal);
+        };
+
+        let has_exp = match base {
+            NumberBase::Decimal => self.source.accept(&['e', 'E']),
+            NumberBase::Hex => self.source.accept(&['p', 'P']),
+            _ => false,
+        };
+        if has_exp {
+            self.source.accept(&['+', '-']);
+            self.skip_digits(NumberBase::Decimal);
+        };
+
+        let span = self.source.span_after(start);
+        let text = &self.source.text[span.range()];
+
+        // TODO: emit more specific errors?
+        if has_decimal_point || has_exp {
+            let options = lexical::ParseFloatOptions::default();
+            let val = lexical::parse_with_options::<f64, _, GO_LITERAL>(text, &options)
+                .map_err(|_| self.error(span, "invalid number syntax".to_string()))?;
+            Ok(self.emit(TokenKind::FloatLiteral(val)))
+        } else {
+            let val = lexical::parse::<i64, _>(text)
+                .map_err(|_| self.error(span, "invalid number syntax".to_string()))?;
+            Ok(self.emit(TokenKind::IntLiteral(val)))
+        }
+    }
+
+    fn skip_digits(&mut self, base: NumberBase) {
+        while self
+            .source
+            .peek()
+            .filter(|c| c == &'_' || c.to_digit(base as _).is_some())
+            .is_some()
+        {
+            self.source.skip(1);
+        }
     }
 
     fn emit(&mut self, kind: TokenKind) -> Token {
@@ -452,9 +510,11 @@ impl Iterator for Lexer<'_> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 enum NumberBase {
+    Binary = 2,
     Octal = 8,
+    Decimal = 10,
     Hex = 16,
 }
 
@@ -462,7 +522,9 @@ impl Display for NumberBase {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         use NumberBase::*;
         match self {
+            Binary => write!(f, "binary"),
             Octal => write!(f, "octal"),
+            Decimal => write!(f, "decimal"),
             Hex => write!(f, "hex"),
         }
     }
