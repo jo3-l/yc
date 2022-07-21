@@ -456,13 +456,13 @@ impl<'a> Lexer<'a> {
         // TODO: emit more specific errors?
         if has_decimal_point || has_exp {
             let options = lexical::ParseFloatOptions::default();
-            let val = lexical::parse_with_options::<f64, _, GO_LITERAL>(text, &options)
-                .map_err(|_| self.error(span, "invalid number syntax".to_string()))?;
-            Ok(self.emit(TokenKind::FloatLiteral(val)))
+            lexical::parse_with_options::<f64, _, GO_LITERAL>(text, &options)
+                .map_err(|_| self.error(span, "invalid number syntax".to_string()))
+                .map(|val| self.emit(TokenKind::FloatLiteral(val)))
         } else {
-            let val = lexical::parse::<i64, _>(text)
-                .map_err(|_| self.error(span, "invalid number syntax".to_string()))?;
-            Ok(self.emit(TokenKind::IntLiteral(val)))
+            lexical::parse::<i64, _>(text)
+                .map_err(|_| self.error(span, "invalid number syntax".to_string()))
+                .map(|val| self.emit(TokenKind::IntLiteral(val)))
         }
     }
 
