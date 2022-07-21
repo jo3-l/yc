@@ -112,7 +112,7 @@ impl<'a> Lexer<'a> {
                 } else {
                     Err(self.error(
                         self.source.span_after(start),
-                        "comment ends before closing delimiter".to_string(),
+                        "comment ends before closing delimiter",
                     ))
                 }
             }
@@ -140,10 +140,7 @@ impl<'a> Lexer<'a> {
             c if c == '_' || c.is_alphanumeric() => self.lex_identifier(),
             _ => {
                 self.source.skip(1);
-                Err(self.error(
-                    self.source.span(),
-                    "unrecognized character in action".to_string(),
-                ))
+                Err(self.error(self.source.span(), "unrecognized character in action"))
             }
         }
     }
@@ -180,8 +177,7 @@ impl<'a> Lexer<'a> {
         if has_trim_marker && !self.source.lookahead(RIGHT_ACTION_DELIM) {
             return Err(self.error(
                 self.source.span_after(start),
-                "expected right action delimiter to appear immediately after trim marker"
-                    .to_string(),
+                "expected right action delimiter to appear immediately after trim marker",
             ));
         }
 
@@ -198,10 +194,7 @@ impl<'a> Lexer<'a> {
 
         let comment_text = self.source.consume_until(RIGHT_COMMENT_MARKER);
         if self.source.at_eof() {
-            return Err(self.error(
-                self.source.span_after(start),
-                "unclosed comment".to_string(),
-            ));
+            return Err(self.error(self.source.span_after(start), "unclosed comment"));
         }
 
         self.source.skip(RIGHT_COMMENT_MARKER.len());
@@ -211,7 +204,7 @@ impl<'a> Lexer<'a> {
         } else {
             Err(self.error(
                 self.source.span_after(start),
-                "comment ends before closing delimiter".to_string(),
+                "comment ends before closing delimiter",
             ))
         }
     }
@@ -275,10 +268,7 @@ impl<'a> Lexer<'a> {
             Some(' ' | '\t' | '\r' | '\n' | '.' | ',' | '|' | ':' | ')' | '(' | '}') => Ok(()),
             Some(_) => {
                 self.source.skip(1);
-                Err(self.error(
-                    self.source.span(),
-                    "expected terminating character".to_string(),
-                ))
+                Err(self.error(self.source.span(), "expected terminating character"))
             }
             _ => Ok(()),
         }
@@ -300,10 +290,7 @@ impl<'a> Lexer<'a> {
         }
 
         if self.source.at_eof() {
-            Err(self.error(
-                self.source.span_after(start),
-                "unterminated quoted string".to_string(),
-            ))
+            Err(self.error(self.source.span_after(start), "unterminated quoted string"))
         } else {
             Ok(self.emit(TokenKind::String(content)))
         }
@@ -321,7 +308,7 @@ impl<'a> Lexer<'a> {
         } else {
             Err(self.error(
                 self.source.span_after(start),
-                "unterminated character literal".to_string(),
+                "unterminated character literal",
             ))
         }
     }
@@ -335,12 +322,10 @@ impl<'a> Lexer<'a> {
             return Ok(first);
         };
 
-        let escapee = self.source.next().ok_or_else(|| {
-            self.error(
-                self.source.span_after(start),
-                "unterminated escape".to_string(),
-            )
-        })?;
+        let escapee = self
+            .source
+            .next()
+            .ok_or_else(|| self.error(self.source.span_after(start), "unterminated escape"))?;
         Ok(match escapee {
             _ if escapee == delimiter => delimiter,
             'a' => '\x07',
@@ -362,7 +347,7 @@ impl<'a> Lexer<'a> {
                 NumberBase::Octal,
             )?,
 
-            _ => return Err(self.error(self.source.span(), "unknown escape character".to_string())),
+            _ => return Err(self.error(self.source.span(), "unknown escape character")),
         })
     }
 
@@ -375,12 +360,10 @@ impl<'a> Lexer<'a> {
     ) -> Result<char> {
         let mut val = initial_value;
         for _ in 0..expected_digits {
-            let c = self.source.next().ok_or_else(|| {
-                self.error(
-                    self.source.span_after(start),
-                    "unterminated escape".to_string(),
-                )
-            })?;
+            let c = self
+                .source
+                .next()
+                .ok_or_else(|| self.error(self.source.span_after(start), "unterminated escape"))?;
             let digit = c.to_digit(base as _).ok_or_else(|| {
                 self.error(
                     self.source.span(),
@@ -390,12 +373,8 @@ impl<'a> Lexer<'a> {
             val = (val * base as u32) | digit;
         }
 
-        Ok(char::from_u32(val).ok_or_else(|| {
-            self.error(
-                self.source.span_after(start),
-                "invalid escape sequence".to_string(),
-            )
-        })?)
+        Ok(char::from_u32(val)
+            .ok_or_else(|| self.error(self.source.span_after(start), "invalid escape sequence"))?)
     }
 
     fn lex_raw_string(&mut self) -> Result {
@@ -408,7 +387,7 @@ impl<'a> Lexer<'a> {
         if self.source.at_eof() {
             Err(self.error(
                 self.source.span_after(start),
-                "unterminated raw quoted string".to_string(),
+                "unterminated raw quoted string",
             ))
         } else {
             self.source.skip(1);
@@ -457,11 +436,11 @@ impl<'a> Lexer<'a> {
         if has_decimal_point || has_exp {
             let options = lexical::ParseFloatOptions::default();
             lexical::parse_with_options::<f64, _, GO_LITERAL>(text, &options)
-                .map_err(|_| self.error(span, "invalid number syntax".to_string()))
+                .map_err(|_| self.error(span, "invalid number syntax"))
                 .map(|val| self.emit(TokenKind::FloatLiteral(val)))
         } else {
             lexical::parse::<i64, _>(text)
-                .map_err(|_| self.error(span, "invalid number syntax".to_string()))
+                .map_err(|_| self.error(span, "invalid number syntax"))
                 .map(|val| self.emit(TokenKind::IntLiteral(val)))
         }
     }
@@ -483,9 +462,9 @@ impl<'a> Lexer<'a> {
         token
     }
 
-    fn error(&self, span: Span, message: String) -> Error {
+    fn error(&self, span: Span, message: impl Into<String>) -> Error {
         Error {
-            message,
+            message: message.into(),
             source_code: self.source.text.to_string(),
             span,
         }
