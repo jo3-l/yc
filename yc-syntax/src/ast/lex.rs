@@ -1,4 +1,4 @@
-use lexical::{format::GO_LITERAL, NumberFormatBuilder};
+use lexical::format::GO_LITERAL;
 
 use crate::ast::{char_stream::CharStream, Error, Position, Span};
 use core::fmt;
