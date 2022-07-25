@@ -332,7 +332,6 @@ pub struct VarName {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-
 pub struct FnCallExpr {
     pub span: Span,
     pub name: String,
