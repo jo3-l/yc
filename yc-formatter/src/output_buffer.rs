@@ -24,7 +24,7 @@ impl OutputBuffer {
         }
     }
 
-    pub(crate) fn to_string(mut self) -> String {
+    pub(crate) fn finish(mut self) -> String {
         self.flush_spaces();
         self.buf
     }

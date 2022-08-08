@@ -57,7 +57,7 @@ impl Printer {
 
     pub(crate) fn finish(mut self) -> String {
         self.flush(..);
-        self.output.to_string()
+        self.output.finish()
     }
 
     pub(crate) fn start_group(&mut self) {
