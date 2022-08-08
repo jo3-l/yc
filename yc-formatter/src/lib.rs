@@ -1,3 +1,7 @@
+mod options;
+mod output_buffer;
+mod printer;
+
 #[cfg(test)]
 mod tests {
     #[test]
