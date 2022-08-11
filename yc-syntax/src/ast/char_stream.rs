@@ -5,7 +5,6 @@ pub(crate) struct CharStream<'a> {
     pub(crate) pos: Position,
 }
 
-// TODO: should CharStream impl Iterator?
 impl<'a> CharStream<'a> {
     pub(crate) fn new(text: &'a str) -> Self {
         Self {
@@ -14,7 +13,18 @@ impl<'a> CharStream<'a> {
         }
     }
 
-    pub(crate) fn accept(&mut self, pat: impl Pattern<'a>) -> bool {
+    pub(crate) fn must_consume<P>(&mut self, pat: P)
+    where
+        P: Pattern<'a>,
+    {
+        assert!(self.lookahead(pat));
+        self.skip(pat.match_len());
+    }
+
+    pub(crate) fn accept<P>(&mut self, pat: P) -> bool
+    where
+        P: Pattern<'a>,
+    {
         if self.lookahead(pat) {
             self.skip(pat.match_len());
             true
@@ -23,7 +33,10 @@ impl<'a> CharStream<'a> {
         }
     }
 
-    pub(crate) fn lookahead(&self, pat: impl Pattern<'a>) -> bool {
+    pub(crate) fn lookahead<P>(&self, pat: P) -> bool
+    where
+        P: Pattern<'a>,
+    {
         pat.is_prefix_of(self.remaining())
     }
 
@@ -39,7 +52,10 @@ impl<'a> CharStream<'a> {
         consumed
     }
 
-    pub(crate) fn consume_until(&mut self, pattern: impl Pattern<'a>) -> String {
+    pub(crate) fn consume_until<P>(&mut self, pattern: P) -> String
+    where
+        P: Pattern<'a>,
+    {
         let mut consumed = String::new();
         while !self.at_eof() && !self.lookahead(pattern) {
             consumed.push(self.next().unwrap());
