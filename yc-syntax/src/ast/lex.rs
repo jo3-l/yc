@@ -543,25 +543,51 @@ impl Display for NumberBase {
 
 #[cfg(test)]
 mod tests {
-    use std::iter;
     use std::ops::Range;
+    use std::sync::mpsc;
+    use std::time::Duration;
+    use std::{iter, string::String, thread};
 
     use crate::ast::lex::{Lexer, Token, TokenKind};
-    use crate::ast::{Position, Span};
+    use crate::ast::{Error, Position, Span};
     use pretty_assertions::assert_eq;
+    use quickcheck_macros::quickcheck;
     use TokenKind::*;
 
-    fn assert_lex_ok(text: &str, want: Vec<Token>) {
+    fn lex(text: &str) -> (Vec<Token>, Vec<Error>) {
         let mut lexer = Lexer::new(text);
-        let got: Vec<_> = iter::from_fn(|| Some(lexer.next_token()))
-            .take_while(|tok| tok.kind != TokenKind::Eof)
+        let tokens = iter::from_fn(|| Some(lexer.next_token()))
+            .take_while(|tok| tok.kind != Eof)
             .collect();
-        assert_eq!(want, got);
-        assert!(lexer.finish().is_empty());
+        (tokens, lexer.finish())
+    }
+
+    fn assert_lex_ok(text: &str, want: Vec<Token>) {
+        let (tokens, errors) = lex(text);
+        assert_eq!(tokens, want);
+        assert!(errors.is_empty());
     }
 
     fn tok(kind: TokenKind, span: Span) -> Token {
         Token::new(kind, span)
+    }
+
+    #[quickcheck]
+    fn lexer_is_lossless(src: String) -> bool {
+        let (sender, receiver) = mpsc::channel();
+        let cloned = src.clone();
+        thread::spawn(move || {
+            let (tokens, _) = lex(&cloned);
+            sender.send(tokens).unwrap();
+        });
+        let tokens = receiver
+            .recv_timeout(Duration::from_secs(5))
+            .unwrap_or_else(|_| panic!("infinite recursion in lexer with input: {src}"));
+        let reconstructed: String = tokens
+            .iter()
+            .map(|token| &src[token.span.range()])
+            .collect();
+        reconstructed == src
     }
 
     // Only works with ASCII source text with no newlines.
