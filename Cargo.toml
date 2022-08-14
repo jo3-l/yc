@@ -1,7 +1,8 @@
 [workspace]
-
 members = [
-	"yc-syntax",
-	"yc-minifier",
-	"yc-formatter",
+	"./yc-ast",
+	"./yc-parser",
+	"./yc-diagnostics",
+	"./yc-minifier",
+	"./yc-formatter",
 ]

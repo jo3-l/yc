@@ -1,4 +1,4 @@
-use crate::ast::{Position, Span};
+use yc_ast::location::{Position, Span};
 
 pub(crate) struct CharStream<'a> {
     pub(crate) text: &'a str,
@@ -13,12 +13,14 @@ impl<'a> CharStream<'a> {
         }
     }
 
-    pub(crate) fn must_consume<P>(&mut self, pat: P)
+    pub(crate) fn must_consume<P>(&mut self, pat: P) -> Span
     where
         P: Pattern<'a>,
     {
         assert!(self.lookahead(pat));
+        let start_pos = self.pos;
         self.skip(pat.match_len());
+        self.span_after(start_pos)
     }
 
     pub(crate) fn accept<P>(&mut self, pat: P) -> bool
@@ -69,6 +71,13 @@ impl<'a> CharStream<'a> {
         Some(c)
     }
 
+    pub(crate) fn next_with_span(&mut self) -> Option<(char, Span)> {
+        let c = self.remaining().chars().next()?;
+        let start_pos = self.pos;
+        self.pos = self.pos.advance_by(c);
+        Some((c, self.span_after(start_pos)))
+    }
+
     pub(crate) fn peek(&self) -> Option<char> {
         self.remaining().chars().next()
     }
@@ -84,6 +93,10 @@ impl<'a> CharStream<'a> {
             Position::new(self.text.len(), self.pos.line, self.pos.col + 1)
         };
         Span::new(self.pos, next_pos)
+    }
+
+    pub(crate) fn zero_width_span(&self) -> Span {
+        Span::new(self.pos, self.pos)
     }
 
     pub(crate) fn span_after(&self, pos: Position) -> Span {

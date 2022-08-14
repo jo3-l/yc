@@ -1,5 +1,5 @@
 [package]
-name = "yc_minifier"
+name = "yc-minifier"
 version = "0.1.0"
 edition = "2021"
 

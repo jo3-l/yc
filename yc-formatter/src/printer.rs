@@ -1,10 +1,9 @@
-use std::{
-    borrow::Cow,
-    collections::VecDeque,
-    ops::{Range, RangeBounds},
-};
+use std::borrow::Cow;
+use std::collections::VecDeque;
+use std::ops::{Range, RangeBounds};
 
-use crate::{options::PrinterOptions, output_buffer::OutputBuffer};
+use crate::options::PrinterOptions;
+use crate::output_buffer::OutputBuffer;
 
 #[derive(Debug)]
 enum Token {

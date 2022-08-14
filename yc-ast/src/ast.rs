@@ -1,116 +1,16 @@
-use core::fmt;
-use std::{cmp::Ordering, error, fmt::Display, ops::Range};
+use bitflags::bitflags;
 
-mod char_stream;
-mod lex;
+use crate::location::Span;
+use crate::node_id::NodeId;
+use crate::parsed_fragment::ParsedFragment;
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Error {
-    pub message: String,
-    pub source_code: String,
-    pub span: Span,
-}
-
-impl error::Error for Error {}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "{}:{}: {}",
-            self.span.start.line, self.span.start.col, self.message
-        )
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Span {
-    pub start: Position,
-    pub end: Position,
-}
-
-impl Span {
-    pub fn new(start: Position, end: Position) -> Self {
-        Self { start, end }
-    }
-
-    pub fn range(&self) -> Range<usize> {
-        self.start.offset..self.end.offset
-    }
-}
-
-impl Ord for Span {
-    fn cmp(&self, other: &Span) -> Ordering {
-        (&self.start, &self.end).cmp(&(&other.start, &other.end))
-    }
-}
-
-impl PartialOrd for Span {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-impl From<Span> for Range<usize> {
-    fn from(span: Span) -> Range<usize> {
-        span.range()
-    }
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Position {
-    pub offset: usize,
-    pub line: usize,
-    pub col: usize,
-}
-
-impl Position {
-    pub fn new(offset: usize, line: usize, col: usize) -> Self {
-        Self { offset, line, col }
-    }
-
-    pub fn advance_by(&self, c: char) -> Position {
-        let mut advanced = *self;
-        advanced.offset += c.len_utf8();
-        if c == '\n' {
-            advanced.line += 1;
-            advanced.col = 1;
-        } else {
-            advanced.col += 1;
-        }
-        advanced
-    }
-}
-
-impl Default for Position {
-    fn default() -> Self {
-        Self {
-            offset: 0,
-            line: 1,
-            col: 1,
-        }
-    }
-}
-
-impl Ord for Position {
-    fn cmp(&self, other: &Position) -> Ordering {
-        self.offset.cmp(&other.offset)
-    }
-}
-
-impl PartialOrd for Position {
-    fn partial_cmp(&self, other: &Position) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct Ast {
+#[derive(Clone, Debug)]
+pub struct Root {
     pub stmts: Vec<Stmt>,
     pub comments: Vec<Comment>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Stmt {
     Text(Text),
 
@@ -125,39 +25,61 @@ pub enum Stmt {
     Expr(ExprStmt),
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+impl Stmt {
+    pub fn span(&self) -> Span {
+        use Stmt::*;
+        match self {
+            Text(ref text) => text.span,
+            Block(ref block) => block.span,
+            Define(ref definition) => definition.span,
+            ConditionalBranch(ref branch) => branch.span,
+            Range(ref range) => range.span,
+            While(ref r#while) => r#while.span,
+            LoopControl(ref r#loop) => r#loop.span,
+            Try(ref r#try) => r#try.span,
+            Return(ref r#return) => r#return.span,
+            Expr(ref expr) => expr.span,
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 pub struct Text {
+    pub node_id: NodeId,
     pub span: Span,
     pub content: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct BlockStmt {
+    pub node_id: NodeId,
     pub span: Span,
     pub trim_markers: TrimMarkers,
     pub context: Option<Expr>,
     pub body: Vec<Stmt>,
-    pub end: EndStmt,
+    pub end: ParsedFragment<EndStmt>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct DefineStmt {
+    pub node_id: NodeId,
     pub span: Span,
     pub trim_markers: TrimMarkers,
     pub name: StringLit,
     pub body: Vec<Stmt>,
-    pub end: EndStmt,
+    pub end: ParsedFragment<EndStmt>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct ConditionalBranchStmt {
+    pub node_id: NodeId,
     pub kind: BranchKind,
     pub span: Span,
     pub trim_markers: TrimMarkers,
     pub cond: Expr,
     pub body: Vec<Stmt>,
     pub else_branches: Vec<ElseBranch>,
-    pub end: EndStmt,
+    pub end: ParsedFragment<EndStmt>,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -166,36 +88,40 @@ pub enum BranchKind {
     With,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct ElseBranch {
+    pub node_id: NodeId,
     pub span: Span,
     pub trim_markers: TrimMarkers,
     pub cond: Option<Expr>,
     pub body: Vec<Stmt>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct RangeStmt {
+    pub node_id: NodeId,
     pub span: Span,
     pub trim_markers: TrimMarkers,
     pub element_binding: Option<VarName>,
     pub index_binding: Option<VarName>,
     pub expr: Expr,
     pub body: Vec<Stmt>,
-    pub end: EndStmt,
+    pub end: ParsedFragment<EndStmt>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct WhileStmt {
+    pub node_id: NodeId,
     pub span: Span,
     pub trim_markers: TrimMarkers,
     pub cond: Expr,
     pub body: Vec<Stmt>,
-    pub end: EndStmt,
+    pub end: ParsedFragment<EndStmt>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct LoopControlStmt {
+    pub node_id: NodeId,
     pub span: Span,
     pub kind: LoopControlKind,
     pub trim_markers: TrimMarkers,
@@ -207,56 +133,63 @@ pub enum LoopControlKind {
     Continue,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct TryStmt {
+    pub node_id: NodeId,
     pub span: Span,
     pub trim_markers: TrimMarkers,
     pub try_body: Vec<Stmt>,
-    pub catch: CatchStmt,
+    pub catch: ParsedFragment<CatchStmt>,
     pub catch_body: Vec<Stmt>,
-    pub end: EndStmt,
+    pub end: ParsedFragment<EndStmt>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct CatchStmt {
+    pub node_id: NodeId,
     pub span: Span,
     pub trim_markers: TrimMarkers,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct EndStmt {
+    pub node_id: NodeId,
     pub span: Span,
     pub trim_markers: TrimMarkers,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct ReturnStmt {
+    pub node_id: NodeId,
     pub span: Span,
     pub trim_markers: TrimMarkers,
     pub expr: Expr,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct ExprStmt {
+    pub node_id: NodeId,
     pub span: Span,
     pub expr: Expr,
     pub trim_markers: TrimMarkers,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct TrimMarkers {
-    pub left: bool,
-    pub right: bool,
+bitflags! {
+    pub struct TrimMarkers: u8 {
+        const LEFT = 1 << 0;
+        const RIGHT = 1 << 1;
+    }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct Comment {
+    pub node_id: NodeId,
     pub span: Span,
     pub trim_markers: TrimMarkers,
     pub content: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub enum Expr {
     BoolLit(BoolLit),
     CharLit(CharLit),
@@ -270,11 +203,33 @@ pub enum Expr {
     VarAssign(VarAssignExpr),
     VarDef(VarDefExpr),
     VarRef(VarRefExpr),
+
+    Invalid(InvalidExpr),
+}
+
+impl Expr {
+    pub fn span(&self) -> Span {
+        use Expr::*;
+        match self {
+            BoolLit(ref lit) => lit.span,
+            CharLit(ref lit) => lit.span,
+            FloatLit(ref lit) => lit.span,
+            IntLit(ref lit) => lit.span,
+            NilLit(ref lit) => lit.span,
+            StringLit(ref lit) => lit.span,
+            FnCall(ref call) => call.span,
+            Pipeline(ref pipeline) => pipeline.span,
+            VarAssign(ref assign) => assign.span,
+            VarDef(ref def) => def.span,
+            VarRef(ref r#ref) => r#ref.span,
+            Invalid(ref invalid) => invalid.span,
+        }
+    }
 }
 
 macro_rules! define_lit {
     ($t:ty, $name:ident) => {
-        #[derive(Clone, Debug, PartialEq)]
+        #[derive(Clone, Debug)]
         pub struct $name {
             pub span: Span,
             pub val: $t,
@@ -287,8 +242,9 @@ define_lit!(char, CharLit);
 define_lit!(f64, FloatLit);
 define_lit!(i64, IntLit);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct StringLit {
+    pub node_id: NodeId,
     pub span: Span,
     pub kind: StringLitKind,
     pub val: String,
@@ -300,46 +256,59 @@ pub enum StringLitKind {
     Interpreted,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct NilLit {
+    pub node_id: NodeId,
     pub span: Span,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct VarAssignExpr {
+    pub node_id: NodeId,
     pub span: Span,
     pub name: VarName,
     pub expr: Box<Expr>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct VarDefExpr {
+    pub node_id: NodeId,
     pub span: Span,
     pub name: VarName,
     pub expr: Box<Expr>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct VarRefExpr {
+    pub node_id: NodeId,
     pub span: Span,
     pub name: VarName,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub struct VarName {
     pub span: Span,
     pub val: String,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct FnCallExpr {
+    pub node_id: NodeId,
     pub span: Span,
     pub name: String,
     pub args: Vec<Expr>,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
 pub struct ExprPipeline {
+    pub node_id: NodeId,
+    pub span: Span,
     pub init: Box<Expr>,
     pub fn_calls: Vec<FnCallExpr>,
+}
+
+#[derive(Clone, Debug)]
+pub struct InvalidExpr {
+    pub node_id: NodeId,
+    pub span: Span,
 }

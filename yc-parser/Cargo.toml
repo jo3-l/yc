@@ -1,5 +1,5 @@
 [package]
-name = "yc-syntax"
+name = "yc-parser"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,6 +8,9 @@ edition = "2021"
 pretty_assertions = "1.2.1"
 
 [dependencies]
+yc-ast = { path = "../yc-ast" }
+yc-diagnostics = { path = "../yc-diagnostics" }
 lexical = { version = "6.1.1", features = ["format"] }
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
+indoc = "1.0.7"

@@ -1,5 +1,6 @@
-use crate::options::IndentStyle;
 use std::iter;
+
+use crate::options::IndentStyle;
 
 pub(crate) struct OutputBuffer {
     indent: IndentStyle,
