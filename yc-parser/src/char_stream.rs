@@ -1,32 +1,31 @@
-use yc_ast::location::{Position, Span};
+use yc_ast::location::{BytePos, Span};
 
+/// A character stream used by the lexer that keeps track of the current
+/// position within the source code.
 pub(crate) struct CharStream<'a> {
-    pub(crate) text: &'a str,
-    pub(crate) pos: Position,
+    pub(crate) src: &'a str,
+    pub(crate) pos: BytePos,
 }
 
 impl<'a> CharStream<'a> {
-    pub(crate) fn new(text: &'a str) -> Self {
+    pub(crate) fn new(src: &'a str) -> Self {
         Self {
-            text,
-            pos: Position::default(),
+            src,
+            pos: BytePos::from_usize(0),
         }
     }
 
-    pub(crate) fn must_consume<P>(&mut self, pat: P) -> Span
-    where
-        P: Pattern<'a>,
-    {
+    /// Advances the stream if the pattern matches at the current position.
+    ///
+    /// Panics if the pattern does not match.
+    pub(crate) fn must_consume(&mut self, pat: impl Pattern<'a>) {
         assert!(self.lookahead(pat));
-        let start_pos = self.pos;
         self.skip(pat.match_len());
-        self.span_after(start_pos)
     }
 
-    pub(crate) fn accept<P>(&mut self, pat: P) -> bool
-    where
-        P: Pattern<'a>,
-    {
+    /// If the pattern matches at the current position, advances the stream and
+    /// returns true; otherwise, returns false.
+    pub(crate) fn accept(&mut self, pat: impl Pattern<'a>) -> bool {
         if self.lookahead(pat) {
             self.skip(pat.match_len());
             true
@@ -35,6 +34,7 @@ impl<'a> CharStream<'a> {
         }
     }
 
+    /// Indicates whether the pattern matches at the current position.
     pub(crate) fn lookahead<P>(&self, pat: P) -> bool
     where
         P: Pattern<'a>,
@@ -42,6 +42,8 @@ impl<'a> CharStream<'a> {
         pat.is_prefix_of(self.remaining())
     }
 
+    /// Advances the stream while the predicate matches the current character and
+    /// returns the text that was skipped over.
     pub(crate) fn consume_while<P>(&mut self, mut predicate: P) -> String
     where
         P: FnMut(char) -> bool,
@@ -54,6 +56,9 @@ impl<'a> CharStream<'a> {
         consumed
     }
 
+    /// Advances the stream until the pattern matches or there are no more
+    /// characters (whichever happens first) and returns the text that was
+    /// skipped over.
     pub(crate) fn consume_until<P>(&mut self, pattern: P) -> String
     where
         P: Pattern<'a>,
@@ -65,65 +70,83 @@ impl<'a> CharStream<'a> {
         consumed
     }
 
+    /// Consumes and returns the next character in the stream.
     pub(crate) fn next(&mut self) -> Option<char> {
         let c = self.remaining().chars().next()?;
-        self.pos = self.pos.advance_by(c);
+        self.pos += c.len_utf8();
         Some(c)
     }
 
+    /// Consumes the next character in the stream and returns it along with its
+    /// span.
     pub(crate) fn next_with_span(&mut self) -> Option<(char, Span)> {
         let c = self.remaining().chars().next()?;
         let start_pos = self.pos;
-        self.pos = self.pos.advance_by(c);
-        Some((c, self.span_after(start_pos)))
+        self.pos += c.len_utf8();
+        Some((c, self.span_from(start_pos)))
     }
 
+    /// Retrieves but does not consume the next character in the stream.
     pub(crate) fn peek(&self) -> Option<char> {
         self.remaining().chars().next()
     }
 
+    /// Retrieves but does not consume the `n`th character starting from the
+    /// current position, where `n` starts at 0.
     pub(crate) fn peek_nth(&self, n: usize) -> Option<char> {
         self.remaining().chars().nth(n)
     }
 
-    pub(crate) fn span(&self) -> Span {
-        let next_pos = if let Some(c) = self.peek() {
-            self.pos.advance_by(c)
-        } else {
-            Position::new(self.text.len(), self.pos.line, self.pos.col + 1)
-        };
-        Span::new(self.pos, next_pos)
+    /// Returns the span associated with the current character. If the end of
+    /// the text has been reached, an empty span pointing to the end of the text
+    /// will be returned.
+    pub(crate) fn cur_span(&self) -> Span {
+        Span::new(
+            self.pos,
+            self.pos + self.peek().map(|c| c.len_utf8()).unwrap_or_default(),
+        )
     }
 
-    pub(crate) fn zero_width_span(&self) -> Span {
-        Span::new(self.pos, self.pos)
+    /// Returns the span associated with the previous character read.
+    pub(crate) fn prev_span(&self) -> Option<Span> {
+        let prev_start = self.pos
+            - self.src[..self.pos.as_usize()]
+                .chars()
+                .next_back()
+                .map(|c| c.len_utf8())?;
+        Some(Span::new(prev_start, self.pos))
     }
 
-    pub(crate) fn span_after(&self, pos: Position) -> Span {
+    /// Returns the span from the given position to the current position.
+    pub(crate) fn span_from(&self, pos: BytePos) -> Span {
         Span::new(pos, self.pos)
     }
 
+    /// Advances the character stream until `n` characters have been read or the
+    /// end of the text is reached, whichever happens first.
     pub(crate) fn skip(&mut self, n: usize) {
         for _ in 0..n {
             self.next();
         }
     }
 
+    /// Returns the remaining text yet to be consumed.
     pub(crate) fn remaining(&self) -> &'a str {
-        &self.text[self.offset()..]
-    }
-
-    pub(crate) fn offset(&self) -> usize {
-        self.pos.offset
+        &self.src[self.pos.as_usize()..]
     }
 
     pub(crate) fn at_eof(&self) -> bool {
-        self.offset() >= self.text.len()
+        self.pos.as_usize() >= self.src.len()
     }
 }
 
+/// A string pattern. Similar to [std::str::pattern::Pattern], but usable on
+/// stable Rust.
 pub(crate) trait Pattern<'a>: Sized + Copy {
+    /// Indicates whether the pattern matches at the start of the haystack.
     fn is_prefix_of(self, haystack: &'a str) -> bool;
+
+    /// Returns the number of characters matched by this pattern.
     fn match_len(self) -> usize;
 }
 
@@ -147,7 +170,7 @@ impl<'a> Pattern<'a> for char {
     }
 }
 
-impl<'a, 'b, const N: usize> Pattern<'a> for &'b [char; N] {
+impl<'a, const N: usize> Pattern<'a> for &'a [char; N] {
     fn is_prefix_of(self, haystack: &'a str) -> bool {
         haystack.starts_with(self)
     }

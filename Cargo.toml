@@ -5,4 +5,5 @@ members = [
 	"./yc-diagnostics",
 	"./yc-minifier",
 	"./yc-formatter",
+	"./yc-cli",
 ]

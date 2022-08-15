@@ -1,43 +1,47 @@
 use std::cmp::Ordering;
-use std::ops::Range;
+use std::ops::{Add, AddAssign, Range, Sub, SubAssign};
 
-trait Spanned {
-    fn span(self) -> Span;
-}
-
+/// A span of text within source code. The span is inclusive on the left end and
+/// exclusive on the right.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct Span {
-    pub start: Position,
-    pub end: Position,
+    pub start: BytePos,
+    pub end: BytePos,
 }
 
 impl Span {
-    pub fn new(start: Position, end: Position) -> Self {
+    pub fn new(start: BytePos, end: BytePos) -> Self {
         Self { start, end }
     }
 
-    pub fn range(&self) -> Range<usize> {
-        self.start.offset..self.end.offset
+    pub fn as_range(&self) -> Range<usize> {
+        self.start.pos..self.end.pos
     }
 
-    pub fn with_start(&self, start: Position) -> Self {
+    /// Returns a new span from the specified start position to the end of this
+    /// span.
+    pub fn with_start(&self, start: BytePos) -> Self {
         Self {
             start,
             end: self.end,
         }
     }
 
-    pub fn with_end(&self, end: Position) -> Self {
+    /// Returns a new span from the start of this span to the specified end
+    /// position.
+    pub fn with_end(&self, end: BytePos) -> Self {
         Self {
             start: self.start,
             end,
         }
     }
 
-    pub fn to(&self, span: Span) -> Self {
+    /// Returns a new span from the start of this span to the end of the other
+    /// span.
+    pub fn to(&self, other: Span) -> Self {
         Self {
             start: self.start,
-            end: span.end,
+            end: other.end,
         }
     }
 }
@@ -56,53 +60,68 @@ impl PartialOrd for Span {
 
 impl From<Span> for Range<usize> {
     fn from(span: Span) -> Range<usize> {
-        span.range()
+        span.as_range()
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct Position {
-    pub offset: usize,
-    pub line: usize,
-    pub col: usize,
-}
-
-impl Position {
-    pub fn new(offset: usize, line: usize, col: usize) -> Self {
-        Self { offset, line, col }
-    }
-
-    pub fn advance_by(&self, c: char) -> Position {
-        let mut next = *self;
-        next.offset += c.len_utf8();
-        if c == '\n' {
-            next.line += 1;
-            next.col = 1;
-        } else {
-            next.col += 1;
-        }
-        next
+impl From<Range<usize>> for Span {
+    fn from(range: Range<usize>) -> Span {
+        Span::new(range.start.into(), range.end.into())
     }
 }
 
-impl Default for Position {
-    fn default() -> Self {
-        Self {
-            offset: 0,
-            line: 1,
-            col: 1,
-        }
+/// A byte offset into source code.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub struct BytePos {
+    pos: usize,
+}
+
+impl BytePos {
+    pub fn from_usize(pos: usize) -> Self {
+        Self { pos }
+    }
+
+    pub fn as_usize(&self) -> usize {
+        self.pos
     }
 }
 
-impl Ord for Position {
-    fn cmp(&self, other: &Position) -> Ordering {
-        self.offset.cmp(&other.offset)
+impl Add<usize> for BytePos {
+    type Output = BytePos;
+
+    fn add(self, offset: usize) -> Self::Output {
+        Self::from_usize(self.as_usize() + offset)
     }
 }
 
-impl PartialOrd for Position {
-    fn partial_cmp(&self, other: &Position) -> Option<Ordering> {
-        Some(self.cmp(other))
+impl AddAssign<usize> for BytePos {
+    fn add_assign(&mut self, offset: usize) {
+        self.pos += offset;
+    }
+}
+
+impl Sub<usize> for BytePos {
+    type Output = BytePos;
+
+    fn sub(self, offset: usize) -> Self::Output {
+        Self::from_usize(self.as_usize() - offset)
+    }
+}
+
+impl SubAssign<usize> for BytePos {
+    fn sub_assign(&mut self, offset: usize) {
+        self.pos -= offset;
+    }
+}
+
+impl From<usize> for BytePos {
+    fn from(pos: usize) -> BytePos {
+        BytePos::from_usize(pos)
+    }
+}
+
+impl From<BytePos> for usize {
+    fn from(pos: BytePos) -> usize {
+        pos.as_usize()
     }
 }

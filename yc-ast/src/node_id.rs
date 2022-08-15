@@ -1,38 +1,59 @@
-use std::ops::Add;
+use std::ops::{Add, AddAssign, Sub, SubAssign};
 
+/// A unique identifier for a node in an AST.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct NodeId {
-    id: u32,
+    id: usize,
 }
 
 impl NodeId {
-    pub const DUMMY: Self = NodeId { id: u32::MAX };
+    pub const DUMMY: Self = NodeId { id: usize::MAX };
 
-    pub fn new(id: u32) -> Self {
+    pub fn from_usize(id: usize) -> Self {
         Self { id }
     }
 
-    pub fn as_u32(self) -> u32 {
+    pub fn as_usize(self) -> usize {
         self.id
     }
 }
 
-impl From<NodeId> for u32 {
-    fn from(id: NodeId) -> u32 {
-        id.as_u32()
-    }
-}
-
-impl From<u32> for NodeId {
-    fn from(id: u32) -> NodeId {
-        NodeId::new(id)
-    }
-}
-
-impl Add<u32> for NodeId {
+impl Add<usize> for NodeId {
     type Output = Self;
 
-    fn add(self, offset: u32) -> Self {
-        Self::new(self.as_u32() + offset)
+    fn add(self, offset: usize) -> Self {
+        Self::from_usize(self.as_usize() + offset)
+    }
+}
+
+impl AddAssign<usize> for NodeId {
+    fn add_assign(&mut self, offset: usize) {
+        self.id += offset;
+    }
+}
+
+impl Sub<usize> for NodeId {
+    type Output = Self;
+
+    fn sub(self, offset: usize) -> Self {
+        Self::from_usize(self.as_usize() - offset)
+    }
+}
+
+impl SubAssign<usize> for NodeId {
+    fn sub_assign(&mut self, offset: usize) {
+        self.id -= offset;
+    }
+}
+
+impl From<NodeId> for usize {
+    fn from(id: NodeId) -> usize {
+        id.as_usize()
+    }
+}
+
+impl From<usize> for NodeId {
+    fn from(id: usize) -> NodeId {
+        NodeId::from_usize(id)
     }
 }
