@@ -38,7 +38,7 @@ pub struct Lexer<'src> {
     file_id: FileId,
     input: CharStream<'src>,
     ctx: LexContext,
-    last_token_end: BytePos,
+    end_of_last_tok: BytePos,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -48,7 +48,7 @@ impl<'src> Lexer<'src> {
             file_id,
             input: CharStream::new(source),
             ctx: LexContext::default(),
-            last_token_end: BytePos::from_usize(0),
+            end_of_last_tok: BytePos::from_usize(0),
             diagnostics: vec![],
         }
     }
@@ -222,7 +222,7 @@ impl<'src> Lexer<'src> {
                 self.add_diagnostic(
                     Diagnostic::error(self.file_id, "comment ends before closing delimiter")
                         .primary(self.input.prev_span().unwrap(), "...and ends here")
-                        .secondary(start_span, "a comment starts here")
+                        .secondary(start_span, "the comment starts here")
                         .footer_note("note: comments cannot appear inside other actions"),
                 );
             }
@@ -230,7 +230,7 @@ impl<'src> Lexer<'src> {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unclosed comment")
                     .primary(self.input.cur_span(), "...but the file ends here")
-                    .secondary(start_span, "a comment starts here")
+                    .secondary(start_span, "the comment starts here")
                     .footer_note("help: use */ to close the comment"),
             );
         }
@@ -561,8 +561,8 @@ impl<'src> Lexer<'src> {
     /// Creates a new token with the given kind spanning from the end of the
     /// previous token created to the current position.
     fn mk_tok(&mut self, kind: TokenKind) -> Token {
-        let token = Token::new(kind, self.input.span_from(self.last_token_end));
-        self.last_token_end = self.input.pos;
+        let token = Token::new(kind, self.input.span_from(self.end_of_last_tok));
+        self.end_of_last_tok = self.input.pos;
         token
     }
 
