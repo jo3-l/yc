@@ -1,6 +1,6 @@
 use std::process::ExitCode;
 
-use clap::{Command, CommandFactory, ErrorKind, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use colored::Colorize;
 use wild;
 
