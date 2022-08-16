@@ -100,12 +100,12 @@ impl<'src> Lexer<'src> {
         match self.input.peek().unwrap() {
             ' ' | '\t' | '\r' | '\n' => self.lex_whitespace(),
             '=' => {
-                self.input.skip(1);
+                self.input.advance(1);
                 self.mk_tok(TokenKind::Assign)
             }
             ':' => {
                 let start = self.input.pos;
-                self.input.skip(1);
+                self.input.advance(1);
                 if self.input.accept('=') {
                     self.mk_tok(TokenKind::Declare)
                 } else {
@@ -117,7 +117,7 @@ impl<'src> Lexer<'src> {
                 }
             }
             '|' => {
-                self.input.skip(1);
+                self.input.advance(1);
                 self.mk_tok(TokenKind::Pipe)
             }
             '"' => self.lex_string(),
@@ -140,15 +140,15 @@ impl<'src> Lexer<'src> {
             }
             '+' | '-' | '0'..='9' => self.lex_numeric_literal(),
             '(' => {
-                self.input.skip(1);
+                self.input.advance(1);
                 self.mk_tok(TokenKind::LeftParen)
             }
             ')' => {
-                self.input.skip(1);
+                self.input.advance(1);
                 self.mk_tok(TokenKind::RightParen)
             }
             ',' => {
-                self.input.skip(1);
+                self.input.advance(1);
                 self.mk_tok(TokenKind::Comma)
             }
             c if c == '_' || c.is_alphanumeric() => self.lex_ident(),
@@ -157,7 +157,7 @@ impl<'src> Lexer<'src> {
                     Diagnostic::error(self.file_id, "unrecognized character in action")
                         .primary_span(self.input.cur_span()),
                 );
-                self.input.skip(1);
+                self.input.advance(1);
                 self.mk_tok(TokenKind::Invalid)
             }
         }
@@ -311,7 +311,7 @@ impl<'src> Lexer<'src> {
                 Diagnostic::error(self.file_id, "expected terminating character")
                     .primary_span(self.input.cur_span()),
             );
-            self.input.skip(1);
+            self.input.advance(1);
         }
     }
 
@@ -437,7 +437,7 @@ impl<'src> Lexer<'src> {
             .chars()
             .map_while(|c| c.to_digit(base as _))
             .collect(); // TODO: Figure out a way to avoid the allocation.
-        self.input.skip(digits.len());
+        self.input.advance(digits.len());
         match digits.len().cmp(&expected_digits) {
             Ordering::Less => {
                 self.add_diagnostic(
@@ -554,7 +554,7 @@ impl<'src> Lexer<'src> {
             .filter(|c| c == &'_' || c.to_digit(base as _).is_some())
             .is_some()
         {
-            self.input.skip(1);
+            self.input.advance(1);
         }
     }
 

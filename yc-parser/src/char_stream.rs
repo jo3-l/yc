@@ -20,14 +20,14 @@ impl<'a> CharStream<'a> {
     /// Panics if the pattern does not match.
     pub(crate) fn must_consume(&mut self, pat: impl Pattern<'a>) {
         assert!(self.lookahead(pat));
-        self.skip(pat.match_len());
+        self.advance(pat.match_len());
     }
 
     /// If the pattern matches at the current position, advances the stream and
     /// returns true; otherwise, returns false.
     pub(crate) fn accept(&mut self, pat: impl Pattern<'a>) -> bool {
         if self.lookahead(pat) {
-            self.skip(pat.match_len());
+            self.advance(pat.match_len());
             true
         } else {
             false
@@ -43,7 +43,7 @@ impl<'a> CharStream<'a> {
     }
 
     /// Advances the stream while the predicate matches the current character and
-    /// returns the text that was skipped over.
+    /// returns the consumed text.
     pub(crate) fn consume_while<P>(&mut self, mut predicate: P) -> String
     where
         P: FnMut(char) -> bool,
@@ -51,14 +51,13 @@ impl<'a> CharStream<'a> {
         let mut consumed = String::new();
         while let Some(c) = self.peek().filter(|c| predicate(*c)) {
             consumed.push(c);
-            self.skip(1);
+            self.advance(1);
         }
         consumed
     }
 
     /// Advances the stream until the pattern matches or there are no more
-    /// characters (whichever happens first) and returns the text that was
-    /// skipped over.
+    /// characters (whichever happens first) and returns the consumed text.
     pub(crate) fn consume_until<P>(&mut self, pattern: P) -> String
     where
         P: Pattern<'a>,
@@ -124,7 +123,7 @@ impl<'a> CharStream<'a> {
 
     /// Advances the character stream until `n` characters have been read or the
     /// end of the text is reached, whichever happens first.
-    pub(crate) fn skip(&mut self, n: usize) {
+    pub(crate) fn advance(&mut self, n: usize) {
         for _ in 0..n {
             self.next();
         }
