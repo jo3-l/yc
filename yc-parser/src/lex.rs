@@ -19,7 +19,7 @@ const RIGHT_ACTION_DELIM: &'static str = "}}";
 const LEFT_TRIM_MARKER: &'static str = "- ";
 const RIGHT_TRIM_MARKER: &'static str = " -";
 
-/// Different contexts in which tokens can be parsed.
+/// Contexts in which tokens can be scanned.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum LexContext {
     Action,
