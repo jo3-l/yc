@@ -18,7 +18,7 @@ impl<'src> TokenSource<'src> {
         }
     }
 
-    /// Returns the next non-whitespace token.
+    /// Returns the next valid non-whitespace token.
     pub(crate) fn next(&mut self) -> Token {
         while let Some(token) = self.lookahead.pop_front() {
             if !matches!(token.kind, TokenKind::Whitespace(_)) {
@@ -35,19 +35,21 @@ impl<'src> TokenSource<'src> {
             .unwrap()
     }
 
-    /// Retrieves but does not consume the next non-whitespace token.
+    /// Retrieves but does not consume the next valid non-whitespace token.
     pub(crate) fn peek(&mut self) -> &Token {
         self.peek_nth(0)
     }
 
-    /// Retrieves but does not consume the `n`th non-whitespace token starting
-    /// from the current token, where `n` starts at `0`.
+    /// Retrieves but does not consume the `n`th valid non-whitespace token
+    /// starting from the current token, where `n` starts at `0`.
     pub(crate) fn peek_nth(&mut self, n: usize) -> &Token {
         if self.lookahead.len() <= n {
             self.lookahead.extend(
                 self.lexer
                     .tokens()
-                    .filter(|token| !matches!(token.kind, TokenKind::Whitespace(_)))
+                    .filter(|token| {
+                        !matches!(token.kind, TokenKind::Invalid | TokenKind::Whitespace(_))
+                    })
                     .take(n - self.lookahead.len() + 1),
             );
         };
