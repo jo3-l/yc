@@ -1,31 +1,30 @@
 //! Provides a container for missing AST nodes.
 //!
 //! # Comparison with `Option`
-///
-/// `Option` and `ParsedFragment` both represent optional values; however, the
-/// two types have different meanings within the context of the AST. An
-/// `Option<Node>` indicates that the given node may be omitted in a well-formed
-/// program. For example, the condition expression of an `else` branch could be
-/// represented as an `Option<Node>`, as both `{{else if cond}}` and `{{else}}`
-/// are valid syntactically.
-///
-/// In contrast, a `ParsedFragment<Node>` indicates that the given node should
-/// never be missing in a well-formed program, but can be missing in partial
-/// ASTs representing invalid programs to facilitate error recovery.
-use std::fmt::Debug;
+//!
+//! `Option` and `ParsedFragment` both represent optional values; however, the
+//! two types have different meanings within the context of the AST. An
+//! `Option<Node>` indicates that the given node may be omitted in a well-formed
+//! program. For example, the condition expression of an `else` branch could be
+//! represented as an `Option<Node>`, as both `{{else if cond}}` and `{{else}}`
+//! are valid syntactically.
+//!
+//! In contrast, a `ParsedFragment<Node>` indicates that the given node should
+//! never be missing in a well-formed program, but can be missing in partial
+//! ASTs representing invalid programs to facilitate error recovery.
 
 /// A container for a potentially missing AST node.
 ///
 /// See the module-level documentation for details.
 #[derive(Clone, Debug)]
-pub enum ParsedFragment<T: Clone + Debug> {
+pub enum ParsedFragment<T> {
     /// The AST node is missing.
     Absent,
     /// The AST node is present.
     Present(T),
 }
 
-impl<T: Clone + Debug + PartialEq> ParsedFragment<T> {
+impl<T> ParsedFragment<T> {
     /// Converts from `ParsedFragment<T>` to `Option<T>`, consuming `self`.
     pub fn ok(self) -> Option<T> {
         match self {
