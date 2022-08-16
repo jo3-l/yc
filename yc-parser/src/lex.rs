@@ -507,10 +507,12 @@ impl<'src> Lexer<'src> {
             NumberBase::Decimal
         };
 
-        self.skip_digits(base);
+        self.input
+            .advance_while(|c| c.to_digit(base as _).is_some());
         let has_decimal_point = self.input.accept('.');
         if has_decimal_point {
-            self.skip_digits(NumberBase::Decimal);
+            self.input
+                .advance_while(|c| c.to_digit(NumberBase::Decimal as _).is_some());
         };
 
         let has_exp = match base {
@@ -520,7 +522,8 @@ impl<'src> Lexer<'src> {
         };
         if has_exp {
             self.input.accept(&['+', '-']);
-            self.skip_digits(NumberBase::Decimal);
+            self.input
+                .advance_while(|c| c.to_digit(NumberBase::Decimal as _).is_some());
         };
 
         let span = self.input.span_from(start_pos);
@@ -544,17 +547,6 @@ impl<'src> Lexer<'src> {
                     );
                     self.mk_tok(TokenKind::Invalid)
                 })
-        }
-    }
-
-    fn skip_digits(&mut self, base: NumberBase) {
-        while self
-            .input
-            .peek()
-            .filter(|c| c == &'_' || c.to_digit(base as _).is_some())
-            .is_some()
-        {
-            self.input.advance(1);
         }
     }
 

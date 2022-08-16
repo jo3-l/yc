@@ -2,13 +2,13 @@ use yc_ast::location::{BytePos, Span};
 
 /// A character stream used by the lexer that keeps track of the current
 /// position within the source code.
-pub(crate) struct CharStream<'a> {
-    pub(crate) src: &'a str,
+pub(crate) struct CharStream<'src> {
+    pub(crate) src: &'src str,
     pub(crate) pos: BytePos,
 }
 
-impl<'a> CharStream<'a> {
-    pub(crate) fn new(src: &'a str) -> Self {
+impl<'src> CharStream<'src> {
+    pub(crate) fn new(src: &'src str) -> Self {
         Self {
             src,
             pos: BytePos::from_usize(0),
@@ -18,14 +18,14 @@ impl<'a> CharStream<'a> {
     /// Advances the stream if the pattern matches at the current position.
     ///
     /// Panics if the pattern does not match.
-    pub(crate) fn must_consume(&mut self, pat: impl Pattern<'a>) {
+    pub(crate) fn must_consume(&mut self, pat: impl Pattern<'src>) {
         assert!(self.lookahead(pat));
         self.advance(pat.match_len());
     }
 
     /// If the pattern matches at the current position, advances the stream and
     /// returns true; otherwise, returns false.
-    pub(crate) fn accept(&mut self, pat: impl Pattern<'a>) -> bool {
+    pub(crate) fn accept(&mut self, pat: impl Pattern<'src>) -> bool {
         if self.lookahead(pat) {
             self.advance(pat.match_len());
             true
@@ -37,9 +37,23 @@ impl<'a> CharStream<'a> {
     /// Indicates whether the pattern matches at the current position.
     pub(crate) fn lookahead<P>(&self, pat: P) -> bool
     where
-        P: Pattern<'a>,
+        P: Pattern<'src>,
     {
         pat.is_prefix_of(self.remaining())
+    }
+
+    /// Advances the stream while the predicate matches the current character
+    /// and returns the number of consumed characters.
+    pub(crate) fn advance_while<P>(&mut self, mut predicate: P) -> usize
+    where
+        P: FnMut(char) -> bool,
+    {
+        let mut count = 0;
+        while self.peek().filter(|c| predicate(*c)).is_some() {
+            count += 1;
+            self.advance(1);
+        }
+        count
     }
 
     /// Advances the stream while the predicate matches the current character and
@@ -60,7 +74,7 @@ impl<'a> CharStream<'a> {
     /// characters (whichever happens first) and returns the consumed text.
     pub(crate) fn consume_until<P>(&mut self, pattern: P) -> String
     where
-        P: Pattern<'a>,
+        P: Pattern<'src>,
     {
         let mut consumed = String::new();
         while !self.at_eof() && !self.lookahead(pattern) {
@@ -130,7 +144,7 @@ impl<'a> CharStream<'a> {
     }
 
     /// Returns the remaining text yet to be consumed.
-    pub(crate) fn remaining(&self) -> &'a str {
+    pub(crate) fn remaining(&self) -> &'src str {
         &self.src[self.pos.as_usize()..]
     }
 
