@@ -1,74 +1,133 @@
-// use crate::ast::lex::TokenKind;
-// use crate::ast::token_source::TokenSource;
-// use crate::ast::{self, Error, Span, Position, TrimMarkers};
+use yc_ast::ast;
+use yc_ast::location::BytePos;
+use yc_ast::node_id::NodeId;
+use yc_diagnostics::Diagnostic;
 
-// pub struct Parser<'a> {
-//     tokens: TokenSource<'a>,
-//     errors: Vec<Error>,
-// }
+use crate::lex::Lexer;
+use crate::token_source::TokenSource;
 
-// impl<'a> Parser<'a> {
-//     pub(crate) fn new(tokens: TokenSource<'a>) -> Self {
-//         Self {
-//             tokens,
-//             errors: vec![],
-//         }
-//     }
+pub struct Parser<'src> {
+    tokens: TokenSource<'src>,
+    diagnostics: Vec<Diagnostic>,
+    node_id: NodeId,
+}
 
-//     pub(crate) fn parse_root(mut self) -> ast::Root {
-//         let mut ctx = ParseContext::default();
-//     }
+impl<'src> Parser<'src> {
+    pub fn new(lexer: Lexer<'src>) -> Self {
+        Self {
+            tokens: TokenSource::new(lexer),
+            diagnostics: vec![],
+            node_id: NodeId::from_usize(0),
+        }
+    }
 
-//     fn parse_stmts(&mut self, ctx: &mut ParseContext) -> Vec<ast::Stmt> {}
+    pub fn parse_root(mut self) -> (ast::Root, Vec<Diagnostic>) {
+        todo!()
+    }
 
-//     fn parse_block(&mut self) -> ast::BlockStmt {}
+    fn parse_actions(&mut self, ctx: &mut ParseContext) -> Vec<ast::Action> {
+        todo!()
+    }
 
-//     fn parse_define(&mut self) -> ast::DefineStmt {
-//         let token = self.tokens.next_non_space();
-//         let name = match self.parse_expr() {
-//             ast::Expr::StringLit(ref lit) => lit,
-//             expr => {
-//                 self.error_at(expr.span(), "associated template name must be a string literal");
-//             }
-//         }
-//     }
+    fn parse_block_action(
+        &mut self,
+        start_pos: BytePos,
+        trim_markers: ast::TrimMarkers,
+        ctx: &mut ParseContext,
+    ) -> ast::BlockAction {
+        todo!()
+    }
 
-//     fn parse_conditional_branch(
-//         &mut self,
-//         kind: ast::ConditionalBranchStmt,
-//     ) -> ast::ConditionalBranchStmt {
-//     }
+    fn parse_define_action(
+        &mut self,
+        start_pos: BytePos,
+        trim_markers: ast::TrimMarkers,
+        ctx: &mut ParseContext,
+    ) -> ast::DefineAction {
+        todo!()
+    }
 
-//     fn parse_range(&mut self) -> ast::RangeStmt {}
+    fn parse_conditional_branch_action(
+        &mut self,
+        kind: ast::BranchKind,
+        start_pos: BytePos,
+        trim_markers: ast::TrimMarkers,
+        ctx: &mut ParseContext,
+    ) -> ast::ConditionalBranchAction {
+        todo!()
+    }
 
-//     fn parse_while(&mut self) -> ast::WhileStmt {}
+    fn parse_range_action(
+        &mut self,
+        start_pos: BytePos,
+        trim_markers: ast::TrimMarkers,
+        ctx: &mut ParseContext,
+    ) -> ast::RangeAction {
+        todo!()
+    }
 
-//     fn parse_loop_control(&mut self) -> ast::LoopControlStmt {}
+    fn parse_while_action(
+        &mut self,
+        start_pos: BytePos,
+        trim_markers: ast::TrimMarkers,
+        ctx: &mut ParseContext,
+    ) -> ast::WhileAction {
+        todo!()
+    }
 
-//     fn parse_try(&mut self) -> ast::TryStmt {}
+    fn parse_loop_control_action(
+        &mut self,
+        kind: ast::LoopControlKind,
+        start_pos: BytePos,
+        trim_markers: ast::TrimMarkers,
+        ctx: &mut ParseContext,
+    ) -> ast::LoopControlAction {
+        todo!()
+    }
 
-//     fn parse_return(&mut self) -> ast::ReturnStmt {}
+    fn parse_try_action(
+        &mut self,
+        start_pos: BytePos,
+        trim_markers: ast::TrimMarkers,
+        ctx: &mut ParseContext,
+    ) -> ast::TryAction {
+        todo!()
+    }
 
-//     fn parse_expr(&mut self) -> ast::Expr {}
+    fn parse_return_action(
+        &mut self,
+        start_pos: BytePos,
+        trim_markers: ast::TrimMarkers,
+        ctx: &mut ParseContext,
+    ) -> ast::ReturnAction {
+        todo!()
+    }
 
-//     fn parse_fn_call(&mut self) -> ast::FnCallExpr {}
+    fn parse_expr(&mut self, ctx: &mut ParseContext) -> ast::Expr {
+        todo!()
+    }
 
-//     fn parse_var(&mut self) -> ast::Expr {}
+    fn parse_fn_call_expr(
+        &mut self,
+        start_pos: BytePos,
+        name: &str,
+        ctx: &mut ParseContext,
+    ) -> ast::FnCallExpr {
+        todo!()
+    }
 
-//     fn error_at<S>(&mut self, span: Span, message: S)
-//     where
-//         S: Into<String>,
-//     {
-//         self.errors.push(Error {
-//             message: message.into(),
-//             source_code: self.tokens.source().to_string(), // TODO: avoid copy?
-//             span,
-//         });
-//     }
-// }
+    fn add_diagnostic(&mut self, diagnostic: Diagnostic) {
+        self.diagnostics.push(diagnostic);
+    }
 
-// #[derive(Default)]
-// struct ParseContext {
-//     defined_vars: Vec<String>,
-//     loop_depth: usize,
-// }
+    fn next_node_id(&mut self) -> NodeId {
+        self.node_id += 1;
+        self.node_id
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct ParseContext {
+    defined_vars: Vec<String>,
+    loop_depth: usize,
+}
