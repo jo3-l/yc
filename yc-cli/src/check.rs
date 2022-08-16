@@ -53,15 +53,20 @@ pub fn run(mut args: Args) -> Result<()> {
     }
 
     println!(
-        "{}: {} errors, {} warnings emitted across {} file(s)",
+        "{}: finished checking {}; emitted {}, {} in total",
         "summary".bold(),
-        stats.errors,
-        stats.warnings,
-        args.files.len()
+        quantify(args.files.len(), "file"),
+        quantify(stats.errors, "error"),
+        quantify(stats.warnings, "warning"),
     );
     if stats.errors > 0 || stats.warnings > 0 {
         process::exit(1);
     } else {
         process::exit(0);
     };
+}
+
+fn quantify(count: usize, item: &str) -> String {
+    let suffix = if count != 1 { "s" } else { "" };
+    format!("{count} {item}{suffix}")
 }
