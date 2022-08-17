@@ -38,7 +38,7 @@ pub struct Lexer<'src> {
     file_id: FileId,
     input: CharStream<'src>,
     ctx: LexContext,
-    end_of_last_tok: BytePos,
+    cur_tok_start: BytePos,
     diagnostics: Vec<Diagnostic>,
 }
 
@@ -48,7 +48,7 @@ impl<'src> Lexer<'src> {
             file_id,
             input: CharStream::new(source),
             ctx: LexContext::default(),
-            end_of_last_tok: BytePos::from_usize(0),
+            cur_tok_start: BytePos::from_usize(0),
             diagnostics: vec![],
         }
     }
@@ -60,13 +60,6 @@ impl<'src> Lexer<'src> {
     /// Finishes the lexer and returns the accumulated diagnostics.
     pub fn finish(self) -> Vec<Diagnostic> {
         self.diagnostics
-    }
-
-    /// Returns an iterator over the tokens following the current token.
-    /// To align with [Lexer::next_token], when the end of text is reached,
-    /// [TokenKind::Eof] will be yielded endlessly.
-    pub fn tokens<'lx>(&'lx mut self) -> Tokens<'lx, 'src> {
-        Tokens { lexer: self }
     }
 
     /// Scans the next token. If the end of text has been reached,
@@ -553,29 +546,13 @@ impl<'src> Lexer<'src> {
     /// Creates a new token with the given kind spanning from the end of the
     /// previous token created to the current position.
     fn mk_tok(&mut self, kind: TokenKind) -> Token {
-        let token = Token::new(kind, self.input.span_from(self.end_of_last_tok));
-        self.end_of_last_tok = self.input.pos;
+        let token = Token::new(kind, self.input.span_from(self.cur_tok_start));
+        self.cur_tok_start = self.input.pos;
         token
     }
 
     fn add_diagnostic(&mut self, diagnostic: Diagnostic) {
         self.diagnostics.push(diagnostic);
-    }
-}
-
-/// An iterator that yields tokens from a lexer.
-///
-/// This struct is created by the [Lexer::tokens] method. See its documentation
-/// for more.
-pub struct Tokens<'lx, 'src> {
-    lexer: &'lx mut Lexer<'src>,
-}
-
-impl Iterator for Tokens<'_, '_> {
-    type Item = Token;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        Some(self.lexer.next_token())
     }
 }
 
@@ -643,10 +620,13 @@ mod tests {
 
     fn lex(text: &str) -> (Vec<Token>, Vec<Diagnostic>) {
         let mut lexer = Lexer::new(0, text);
-        let tokens = lexer
-            .tokens()
-            .take_while(|token| token.kind != Eof)
-            .collect();
+        let mut tokens = vec![];
+        loop {
+            match lexer.next_token() {
+                Token { kind: Eof, .. } => break,
+                token @ Token { .. } => tokens.push(token),
+            }
+        }
         (tokens, lexer.finish())
     }
 
