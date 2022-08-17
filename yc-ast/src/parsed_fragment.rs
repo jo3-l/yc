@@ -55,3 +55,16 @@ impl<T> ParsedFragment<T> {
         }
     }
 }
+
+impl<T> From<ParsedFragment<T>> for Option<T> {
+    fn from(frag: ParsedFragment<T>) -> Self {
+        frag.ok()
+    }
+}
+
+impl<T> From<Option<T>> for ParsedFragment<T> {
+    fn from(opt: Option<T>) -> Self {
+        opt.map(ParsedFragment::Present)
+            .unwrap_or(ParsedFragment::Absent)
+    }
+}
