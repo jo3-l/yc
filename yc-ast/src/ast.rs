@@ -286,7 +286,7 @@ pub struct ReturnAction {
     pub expr: Option<Expr>,
 }
 
-/// An expression containing a single expression. For example, `{{add 1 1}}` is
+/// An action containing a single expression. For example, `{{add 1 1}}` is
 /// an `ExprAction`, as `add 1 1` is a `FnCallExpr`.
 ///
 /// ```text
@@ -327,6 +327,23 @@ pub struct Comment {
     pub content: String,
 }
 
+/// An expression within an action.
+///
+/// ```text
+/// Expr = BoolLit |
+///     CharLit |
+///     FloatLit |
+///     IntLit |
+///     NilLit |
+///     StringLit |
+///     ContextAccessExpr |
+///     FieldAccessOrMethodCallExpr |
+///     FnCallExpr |
+///     ExprPipeline |
+///     VarAssignExpr |
+///     VarDefExpr |
+///     VarRefExpr .
+/// ```
 #[derive(Clone, Debug)]
 pub enum Expr {
     BoolLit(BoolLit),
@@ -336,6 +353,8 @@ pub enum Expr {
     NilLit(NilLit),
     StringLit(StringLit),
 
+    ContextAccess(ContextAccessExpr),
+    FieldAccessOrMethodCall(FieldAccessOrMethodCallExpr),
     FnCall(FnCallExpr),
     Pipeline(ExprPipeline),
     VarAssign(VarAssignExpr),
@@ -354,6 +373,8 @@ impl Expr {
             NilLit(ref nil_lit) => nil_lit.span,
             StringLit(ref string_lit) => string_lit.span,
 
+            ContextAccess(ref ctx) => ctx.span,
+            FieldAccessOrMethodCall(ref field_or_method) => field_or_method.span,
             FnCall(ref call) => call.span,
             Pipeline(ref pipeline) => pipeline.span,
             VarAssign(ref assign) => assign.span,
@@ -428,6 +449,40 @@ pub struct NilLit {
     pub span: Span,
 }
 
+/// A context access expression.
+///
+/// ```text
+/// ContextAccessExpr = "." .
+/// ```
+#[derive(Clone, Debug)]
+pub struct ContextAccessExpr {
+    pub node_id: NodeId,
+    pub span: Span,
+}
+
+/// A field access or method call expression.
+///
+/// ```text
+/// FieldAccessOrMethodCallExpr = [ Expr ] "." ident { Expr } .
+/// ```
+#[derive(Clone, Debug)]
+pub struct FieldAccessOrMethodCallExpr {
+    pub node_id: NodeId,
+    pub span: Span,
+    pub obj: SelectorTarget,
+    pub selector: ParsedFragment<Ident>,
+    pub call_args: Vec<Expr>,
+}
+
+/// The target of a selector expression. For example, the target of `(f arg0
+/// arg1).Y` is `(f arg0 arg1)`, whereas the target of `.Y` is the context
+/// value.
+#[derive(Clone, Debug)]
+pub enum SelectorTarget {
+    Context,
+    Expr(Box<Expr>),
+}
+
 /// A variable assignment expression.
 ///
 /// ```text
@@ -486,8 +541,15 @@ pub struct VarName {
 pub struct FnCallExpr {
     pub node_id: NodeId,
     pub span: Span,
-    pub name: String,
+    pub name: Ident,
     pub args: Vec<Expr>,
+}
+
+/// An alphanumeric identifier.
+#[derive(Clone, Debug)]
+pub struct Ident {
+    pub span: Span,
+    pub val: String,
 }
 
 /// A pipeline of expressions.
@@ -501,5 +563,5 @@ pub struct ExprPipeline {
     pub node_id: NodeId,
     pub span: Span,
     pub init: ParsedFragment<Box<Expr>>,
-    pub fn_calls: Vec<FnCallExpr>,
+    pub calls: Vec<FnCallExpr>,
 }
