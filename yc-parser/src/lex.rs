@@ -57,6 +57,10 @@ impl<'src> Lexer<'src> {
         self.input.src
     }
 
+    pub fn at_eof(&self) -> bool {
+        self.input.at_eof()
+    }
+
     /// Finishes the lexer and returns the accumulated diagnostics.
     pub fn finish(self) -> Vec<Diagnostic> {
         self.diagnostics
@@ -65,7 +69,7 @@ impl<'src> Lexer<'src> {
     /// Scans the next token. If the end of text has been reached,
     /// [TokenKind::Eof] will be returned.
     pub fn next_token(&mut self) -> Token {
-        if self.input.at_eof() {
+        if self.at_eof() {
             self.mk_tok(TokenKind::Eof)
         } else if self.at_start_of_action() {
             self.lex_start_of_action()
@@ -315,13 +319,13 @@ impl<'src> Lexer<'src> {
         self.input.must_consume('"');
 
         let mut content = String::new();
-        while !self.input.at_eof() && !self.input.accept('"') {
+        while !self.at_eof() && !self.input.accept('"') {
             if let Ok(c) = self.read_char(ReadCharContext::QuotedString, start_span) {
                 content.push(c);
             }
         }
 
-        if self.input.at_eof() {
+        if self.at_eof() {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unterminated quoted string")
                     .primary(self.input.cur_span(), "...but the file ends here")
