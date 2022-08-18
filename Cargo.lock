@@ -580,6 +580,7 @@ version = "0.1.0"
 name = "yc-parser"
 version = "0.1.0"
 dependencies = [
+ "bitflags",
  "indoc",
  "lexical",
  "pretty_assertions",
