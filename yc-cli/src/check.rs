@@ -38,10 +38,6 @@ pub fn run(mut args: Args) -> Result<()> {
             content.clone(),
         );
         let mut lexer = Lexer::new(id, &content);
-        lexer
-            .tokens()
-            .take_while(|token| token.kind != TokenKind::Eof)
-            .for_each(drop);
         for diag in lexer.finish().into_iter().map(|diag| diag.build()) {
             match diag.severity {
                 Severity::Error => stats.errors += 1,

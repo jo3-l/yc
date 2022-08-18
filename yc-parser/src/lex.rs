@@ -62,7 +62,10 @@ impl<'src> Lexer<'src> {
     }
 
     /// Finishes the lexer and returns the accumulated diagnostics.
-    pub fn finish(self) -> Vec<Diagnostic> {
+    pub fn finish(mut self) -> Vec<Diagnostic> {
+        while !self.at_eof() {
+            self.next_token();
+        }
         self.diagnostics
     }
 
