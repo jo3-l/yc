@@ -37,7 +37,7 @@ pub fn run(mut args: Args) -> Result<()> {
             path.file_name().map(|name| name.to_string_lossy()).unwrap(),
             content.clone(),
         );
-        let mut lexer = Lexer::new(id, &content);
+        let lexer = Lexer::new(id, &content);
         for diag in lexer.finish().into_iter().map(|diag| diag.build()) {
             match diag.severity {
                 Severity::Error => stats.errors += 1,
