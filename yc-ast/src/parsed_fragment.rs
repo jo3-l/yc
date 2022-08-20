@@ -29,7 +29,7 @@ impl<T> ParsedFragment<T> {
     pub fn ok(self) -> Option<T> {
         match self {
             ParsedFragment::Absent => None,
-            ParsedFragment::Present(value) => Some(value),
+            ParsedFragment::Present(x) => Some(x),
         }
     }
 
@@ -51,7 +51,19 @@ impl<T> ParsedFragment<T> {
             ParsedFragment::Absent => {
                 panic!("called `ParsedFragment::unwrap()` on an `Absent` value")
             }
-            ParsedFragment::Present(value) => value,
+            ParsedFragment::Present(x) => x,
+        }
+    }
+
+    /// Maps a `ParsedFragment<T>` to `ParsedFragment<U>` by applying a function
+    /// to a contained value.
+    pub fn map<U, F>(self, f: F) -> ParsedFragment<U>
+    where
+        F: FnOnce(T) -> U,
+    {
+        match self {
+            ParsedFragment::Absent => ParsedFragment::Absent,
+            ParsedFragment::Present(x) => ParsedFragment::Present(f(x)),
         }
     }
 }
@@ -64,7 +76,6 @@ impl<T> From<ParsedFragment<T>> for Option<T> {
 
 impl<T> From<Option<T>> for ParsedFragment<T> {
     fn from(opt: Option<T>) -> Self {
-        opt.map(ParsedFragment::Present)
-            .unwrap_or(ParsedFragment::Absent)
+        opt.map_or(ParsedFragment::Absent, ParsedFragment::Present)
     }
 }
