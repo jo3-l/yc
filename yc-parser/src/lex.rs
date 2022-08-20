@@ -8,7 +8,7 @@ use yc_ast::location::{BytePos, Span};
 use yc_ast::token::{Token, TokenKind};
 use yc_diagnostics::{Diagnostic, FileId};
 
-use crate::char_stream::CharStream;
+use crate::input_cursor::InputCursor;
 
 const LEFT_COMMENT_MARKER: &'static str = "/*";
 const RIGHT_COMMENT_MARKER: &'static str = "*/";
@@ -36,7 +36,7 @@ impl Default for LexContext {
 /// An error-tolerant lexer for YAGPDB-flavored Go templates.
 pub struct Lexer<'src> {
     file_id: FileId,
-    input: CharStream<'src>,
+    cursor: InputCursor<'src>,
     ctx: LexContext,
     cur_tok_start: BytePos,
     diagnostics: Vec<Diagnostic>,
@@ -46,7 +46,7 @@ impl<'src> Lexer<'src> {
     pub fn new(file_id: FileId, source: &'src str) -> Self {
         Self {
             file_id,
-            input: CharStream::new(source),
+            cursor: InputCursor::new(source),
             ctx: LexContext::default(),
             cur_tok_start: BytePos::from_usize(0),
             diagnostics: vec![],
@@ -54,11 +54,11 @@ impl<'src> Lexer<'src> {
     }
 
     pub fn source(&self) -> &'src str {
-        self.input.src
+        self.cursor.src
     }
 
     pub fn at_eof(&self) -> bool {
-        self.input.at_eof()
+        self.cursor.at_eof()
     }
 
     /// Finishes the lexer and returns the accumulated diagnostics.
@@ -87,7 +87,11 @@ impl<'src> Lexer<'src> {
 
     /// Lexes a piece of literal text.
     fn lex_text(&mut self) -> Token {
-        let text = self.input.consume_until(LEFT_ACTION_DELIM);
+        let mut text = String::new();
+        while !self.cursor.at_eof() && !self.at(LEFT_ACTION_DELIM) {
+            text.push(self.cursor.first().unwrap());
+            self.cursor.bump();
+        }
         self.mk_tok(TokenKind::Text(text))
     }
 
@@ -97,29 +101,23 @@ impl<'src> Lexer<'src> {
             return self.lex_end_of_action();
         }
 
-        match self.input.peek().unwrap() {
+        match self.cursor.first().unwrap() {
             ' ' | '\t' | '\r' | '\n' => self.lex_whitespace(),
-            '=' => {
-                self.input.advance(1);
-                self.mk_tok(TokenKind::Assign)
-            }
+            '=' => self.bump_and_emit(TokenKind::Assign),
             ':' => {
-                let start = self.input.pos;
-                self.input.advance(1);
-                if self.input.accept('=') {
+                let start = self.cursor.pos;
+                self.cursor.bump();
+                if self.eat('=') {
                     self.mk_tok(TokenKind::Declare)
                 } else {
                     self.add_diagnostic(
                         Diagnostic::error(self.file_id, "expected declaration")
-                            .primary_span(self.input.span_from(start)),
+                            .primary_span(self.cursor.span_after(start)),
                     );
                     self.mk_tok(TokenKind::Invalid)
                 }
             }
-            '|' => {
-                self.input.advance(1);
-                self.mk_tok(TokenKind::Pipe)
-            }
+            '|' => self.bump_and_emit(TokenKind::Pipe),
             '"' => self.lex_string(),
             '`' => self.lex_raw_string(),
             '$' => self.lex_variable(),
@@ -127,11 +125,7 @@ impl<'src> Lexer<'src> {
             '.' => {
                 // A '.' can begin a field or a numeric literal. Look at the
                 // next character to disambiguate.
-                let followed_by_digit = self
-                    .input
-                    .peek_nth(1)
-                    .filter(|c| c.is_ascii_digit())
-                    .is_some();
+                let followed_by_digit = self.cursor.nth(1).filter(|c| c.is_ascii_digit()).is_some();
                 if followed_by_digit {
                     self.lex_numeric_literal()
                 } else {
@@ -139,41 +133,37 @@ impl<'src> Lexer<'src> {
                 }
             }
             '+' | '-' | '0'..='9' => self.lex_numeric_literal(),
-            '(' => {
-                self.input.advance(1);
-                self.mk_tok(TokenKind::LeftParen)
-            }
-            ')' => {
-                self.input.advance(1);
-                self.mk_tok(TokenKind::RightParen)
-            }
-            ',' => {
-                self.input.advance(1);
-                self.mk_tok(TokenKind::Comma)
-            }
+            '(' => self.bump_and_emit(TokenKind::LeftParen),
+            ')' => self.bump_and_emit(TokenKind::RightParen),
+            ',' => self.bump_and_emit(TokenKind::Comma),
             c if c == '_' || c.is_alphanumeric() => self.lex_ident(),
             _ => {
                 self.add_diagnostic(
                     Diagnostic::error(self.file_id, "unrecognized character in action")
-                        .primary_span(self.input.cur_span()),
+                        .primary_span(self.cursor.span()),
                 );
-                self.input.advance(1);
+                self.cursor.bump();
                 self.mk_tok(TokenKind::Invalid)
             }
         }
     }
 
-    /// Indicates whether an action starts at the current position.
-    fn at_start_of_action(&mut self) -> bool {
-        self.input.lookahead(LEFT_ACTION_DELIM)
+    /// Bumps the cursor to the next position and returns the token passed in.
+    fn bump_and_emit(&mut self, tok: TokenKind) -> Token {
+        self.cursor.bump();
+        self.mk_tok(tok)
     }
 
-    /// Lexes the start of an action. The left action delimiter is known to be
-    /// present.
+    /// Indicates whether an action starts at the current position.
+    fn at_start_of_action(&mut self) -> bool {
+        self.at(LEFT_ACTION_DELIM)
+    }
+
+    /// Lexes the start of an action. The left action delimiter is known to be present.
     fn lex_start_of_action(&mut self) -> Token {
-        self.input.must_consume(LEFT_ACTION_DELIM);
-        let has_trim_marker = self.input.accept(LEFT_TRIM_MARKER);
-        self.ctx = if self.input.lookahead(LEFT_COMMENT_MARKER) {
+        assert!(self.eat(LEFT_ACTION_DELIM));
+        let has_trim_marker = self.eat(LEFT_TRIM_MARKER);
+        self.ctx = if self.at(LEFT_COMMENT_MARKER) {
             LexContext::Comment
         } else {
             LexContext::Action
@@ -183,15 +173,15 @@ impl<'src> Lexer<'src> {
 
     /// Indicates whether an action ends at the current position.
     fn at_end_of_action(&mut self) -> bool {
-        self.input.lookahead(RIGHT_ACTION_DELIM) || self.input.lookahead(RIGHT_TRIM_MARKER)
+        self.at(RIGHT_ACTION_DELIM) || self.at(RIGHT_TRIM_MARKER)
     }
 
     /// Lexes the end of an action. Either the right trim marker or
     /// the right action delimiter is known to be present.
     fn lex_end_of_action(&mut self) -> Token {
-        let start_pos = self.input.pos;
-        let has_trim_marker = self.input.accept(RIGHT_TRIM_MARKER);
-        let has_right_delim = self.input.accept(RIGHT_ACTION_DELIM);
+        let start_pos = self.cursor.pos;
+        let has_trim_marker = self.eat(RIGHT_TRIM_MARKER);
+        let has_right_delim = self.eat(RIGHT_ACTION_DELIM);
         if has_trim_marker && !has_right_delim {
             self.add_diagnostic(
                 Diagnostic::error(
@@ -199,7 +189,7 @@ impl<'src> Lexer<'src> {
                     "expected right action delimiter to appear immediately after trim marker",
                 )
                 .primary(
-                    self.input.span_from(start_pos),
+                    self.cursor.span_after(start_pos),
                     "expected a right action delimiter after this",
                 ),
             );
@@ -213,15 +203,21 @@ impl<'src> Lexer<'src> {
 
     /// Lexes a comment. The left comment marker is known to be present.
     fn lex_comment(&mut self) -> Token {
-        let start_span = self.input.cur_span();
-        self.input.must_consume(LEFT_COMMENT_MARKER);
-        let comment_text = self.input.consume_until(RIGHT_COMMENT_MARKER);
-        if self.input.accept(RIGHT_COMMENT_MARKER) {
+        let start_span = self.cursor.span();
+        assert!(self.eat(LEFT_COMMENT_MARKER));
+
+        let mut comment_text = String::new();
+        while !self.at_eof() && !self.at(RIGHT_COMMENT_MARKER) {
+            comment_text.push(self.cursor.first().unwrap());
+            self.cursor.bump();
+        }
+
+        if self.eat(RIGHT_COMMENT_MARKER) {
             self.ctx = LexContext::Action;
             if !self.at_end_of_action() {
                 self.add_diagnostic(
                     Diagnostic::error(self.file_id, "comment ends before closing delimiter")
-                        .primary(self.input.prev_span().unwrap(), "...and ends here")
+                        .primary(self.cursor.prev_span().unwrap(), "...and ends here")
                         .secondary(start_span, "the comment starts here")
                         .footer_note("note: comments cannot appear inside other actions"),
                 );
@@ -229,7 +225,7 @@ impl<'src> Lexer<'src> {
         } else {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unclosed comment")
-                    .primary(self.input.cur_span(), "...but the file ends here")
+                    .primary(self.cursor.span(), "...but the file ends here")
                     .secondary(start_span, "the comment starts here")
                     .footer_note("help: use */ to close the comment"),
             );
@@ -240,9 +236,15 @@ impl<'src> Lexer<'src> {
 
     /// Lexes a run of whitespace within an action.
     fn lex_whitespace(&mut self) -> Token {
-        let whitespace = self
-            .input
-            .consume_while(|c| matches!(c, ' ' | '\t' | '\r' | '\n'));
+        let mut whitespace = String::new();
+        while let Some(c) = self
+            .cursor
+            .first()
+            .filter(|c| matches!(c, ' ' | '\t' | '\r' | '\n'))
+        {
+            whitespace.push(c);
+            self.cursor.bump();
+        }
         self.mk_tok(TokenKind::Whitespace(whitespace))
     }
 
@@ -276,7 +278,7 @@ impl<'src> Lexer<'src> {
 
     /// Lexes a variable. The '$' is known to be present.
     fn lex_variable(&mut self) -> Token {
-        self.input.must_consume('$');
+        assert!(self.eat('$'));
         let var_name = self.read_ident();
         self.expect_terminator();
         self.mk_tok(TokenKind::Variable(var_name))
@@ -284,7 +286,7 @@ impl<'src> Lexer<'src> {
 
     /// Lexes a field. The '.' is known to be present.
     fn lex_field(&mut self) -> Token {
-        self.input.must_consume('.');
+        assert!(self.eat('.'));
         let field_name = self.read_ident();
         self.expect_terminator();
         self.mk_tok(if field_name.is_empty() {
@@ -295,8 +297,16 @@ impl<'src> Lexer<'src> {
     }
 
     fn read_ident(&mut self) -> String {
-        self.input
-            .consume_while(|c| c == '_' || c.is_alphanumeric())
+        let mut ident = String::new();
+        while let Some(c) = self
+            .cursor
+            .first()
+            .filter(|c| c == &'_' || c.is_alphanumeric())
+        {
+            ident.push(c);
+            self.cursor.bump();
+        }
+        ident
     }
 
     /// Emits a diagnostic if the next character isn't a terminator.
@@ -304,34 +314,33 @@ impl<'src> Lexer<'src> {
         // Note that if `RIGHT_ACTION_DELIM` is modified, the } here must be
         // changed appropriately as well.
         if !matches!(
-            self.input.peek(),
+            self.cursor.first(),
             Some(' ' | '\t' | '\r' | '\n' | '.' | ',' | ':' | ')' | '(' | '}') | None
         ) {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "expected terminating character")
-                    .primary_span(self.input.cur_span()),
+                    .primary_span(self.cursor.span()),
             );
-            self.input.advance(1);
+            self.cursor.bump();
         }
     }
 
     /// Lexes a quoted string literal. The left quotation mark is known to be
     /// present.
     fn lex_string(&mut self) -> Token {
-        let start_span = self.input.cur_span();
-        self.input.must_consume('"');
+        let start_span = self.cursor.span();
+        assert!(self.eat('"'));
 
         let mut content = String::new();
-        while !self.at_eof() && !self.input.accept('"') {
+        while !self.at_eof() && !self.eat('"') {
             if let Ok(c) = self.read_char(ReadCharContext::QuotedString, start_span) {
                 content.push(c);
             }
         }
-
         if self.at_eof() {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unterminated quoted string")
-                    .primary(self.input.cur_span(), "...but the file ends here")
+                    .primary(self.cursor.span(), "...but the file ends here")
                     .secondary(start_span, "the string starts here")
                     .footer_note(r#"help: use " to close the string"#),
             );
@@ -342,16 +351,16 @@ impl<'src> Lexer<'src> {
     /// Lexes a character literal. The left quotation mark is known to be
     /// present.
     fn lex_char_lit(&mut self) -> Token {
-        let start_span = self.input.cur_span();
-        self.input.must_consume('\'');
+        let start_span = self.cursor.span();
+        assert!(self.eat('\''));
+
         let kind = self
             .read_char(ReadCharContext::CharLiteral, start_span)
             .map_or(TokenKind::Invalid, TokenKind::CharLiteral);
-
-        if !self.input.accept('\'') {
+        if !self.eat('\'') {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unterminated character literal")
-                    .primary(self.input.cur_span(), "...and should end here")
+                    .primary(self.cursor.span(), "...and should end here")
                     .secondary(start_span, "the character literal starts here")
                     .footer_note("help: use ' to close the character literal"),
             );
@@ -362,7 +371,9 @@ impl<'src> Lexer<'src> {
     /// Reads a character within a character literal or a quoted string literal,
     /// which may be represented by an escape sequence.
     fn read_char(&mut self, ctx: ReadCharContext, open_delim_span: Span) -> Result<char, ()> {
-        let (first, span_of_first) = self.input.next_with_span().unwrap();
+        let first = self.cursor.first().unwrap();
+        let span_of_first = self.cursor.span();
+        self.cursor.bump();
         if first != '\\' {
             if first == '\n' {
                 let mut err =
@@ -381,16 +392,18 @@ impl<'src> Lexer<'src> {
             return Ok(first);
         }
 
-        let (escapee, span_of_escapee) = self.input.next_with_span().ok_or_else(|| {
+        let escapee = self.cursor.first().ok_or_else(|| {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "expected escape sequence")
-                    .primary(self.input.cur_span(), "...but the file ends here")
+                    .primary(self.cursor.span(), "...but the file ends here")
                     .secondary(
                         span_of_first,
                         "the backslash here begins an escape sequence",
                     ),
             );
         })?;
+        let span_of_escapee = self.cursor.span();
+        self.cursor.bump();
         Ok(match escapee {
             'a' => '\x07',
             'b' => '\x08',
@@ -430,18 +443,17 @@ impl<'src> Lexer<'src> {
         expected_digits: usize,
         base: NumberBase,
     ) -> Result<char, ()> {
-        let digits: Vec<_> = self
-            .input
-            .remaining()
-            .chars()
-            .map_while(|c| c.to_digit(base as _))
-            .collect(); // TODO: Figure out a way to avoid the allocation.
-        self.input.advance(digits.len());
+        let mut digits = vec![];
+        while let Some(c) = self.cursor.first().and_then(|c| c.to_digit(base as _)) {
+            digits.push(c);
+            self.cursor.bump();
+        }
+
         match digits.len().cmp(&expected_digits) {
             Ordering::Less => {
                 self.add_diagnostic(
                     Diagnostic::error(self.file_id, "too few digits in escape sequence")
-                        .primary_span(self.input.span_from(start_pos)),
+                        .primary_span(self.cursor.span_after(start_pos)),
                 );
                 Err(())
             }
@@ -455,7 +467,7 @@ impl<'src> Lexer<'src> {
                             self.file_id,
                             "escape sequence results in invalid character",
                         )
-                        .primary_span(self.input.span_from(start_pos))
+                        .primary_span(self.cursor.span_after(start_pos))
                         .footer_note("note: valid characters are in the range 0 to Ox10FFFF, inclusive, excluding surrogate code points (0xD800 to 0xDFFF)"),
                     );
                 })?)
@@ -463,7 +475,7 @@ impl<'src> Lexer<'src> {
             Ordering::Greater => {
                 self.add_diagnostic(
                     Diagnostic::error(self.file_id, "too many digits in escape sequence")
-                        .primary_span(self.input.span_from(start_pos)),
+                        .primary_span(self.cursor.span_after(start_pos)),
                 );
                 Err(())
             }
@@ -472,13 +484,18 @@ impl<'src> Lexer<'src> {
 
     /// Lexes a raw string literal. The opening backtick is known to be present.
     fn lex_raw_string(&mut self) -> Token {
-        let start_span = self.input.cur_span();
-        self.input.must_consume('`');
-        let content = self.input.consume_until('`');
-        if !self.input.accept('`') {
+        let start_span = self.cursor.span();
+        assert!(self.eat('`'));
+        let mut content = String::new();
+        while let Some(c) = self.cursor.first().filter(|c| c != &'`') {
+            content.push(c);
+            self.cursor.bump();
+        }
+
+        if !self.eat('`') {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unterminated raw quoted string")
-                    .primary(self.input.cur_span(), "...but the file ends here")
+                    .primary(self.cursor.span(), "...but the file ends here")
                     .secondary(start_span, "the string starts here"),
             );
         }
@@ -490,14 +507,14 @@ impl<'src> Lexer<'src> {
     /// TODO: Emit more specific diagnostics.
     /// TODO: Support complex literals.
     fn lex_numeric_literal(&mut self) -> Token {
-        let start_pos = self.input.pos;
-        self.input.accept(&['+', '-']);
-        let base = if self.input.accept('0') {
-            if self.input.accept(&['x', 'X']) {
+        let start_pos = self.cursor.pos;
+        self.eat(&['+', '-']);
+        let base = if self.eat('0') {
+            if self.eat(&['x', 'X']) {
                 NumberBase::Hex
-            } else if self.input.accept(&['o', 'O']) {
+            } else if self.eat(&['o', 'O']) {
                 NumberBase::Octal
-            } else if self.input.accept(&['b', 'B']) {
+            } else if self.eat(&['b', 'B']) {
                 NumberBase::Binary
             } else {
                 NumberBase::Decimal
@@ -506,27 +523,26 @@ impl<'src> Lexer<'src> {
             NumberBase::Decimal
         };
 
-        self.input
-            .advance_while(|c| c.to_digit(base as _).is_some());
-        let has_decimal_point = self.input.accept('.');
+        self.cursor.bump_while(|c| c.to_digit(base as _).is_some());
+        let has_decimal_point = self.eat('.');
         if has_decimal_point {
-            self.input
-                .advance_while(|c| c.to_digit(NumberBase::Decimal as _).is_some());
+            self.cursor
+                .bump_while(|c| c.to_digit(NumberBase::Decimal as _).is_some());
         };
 
         let has_exp = match base {
-            NumberBase::Decimal => self.input.accept(&['e', 'E']),
-            NumberBase::Hex => self.input.accept(&['p', 'P']),
+            NumberBase::Decimal => self.eat(&['e', 'E']),
+            NumberBase::Hex => self.eat(&['p', 'P']),
             _ => false,
         };
         if has_exp {
-            self.input.accept(&['+', '-']);
-            self.input
-                .advance_while(|c| c.to_digit(NumberBase::Decimal as _).is_some());
+            self.eat(&['+', '-']);
+            self.cursor
+                .bump_while(|c| c.to_digit(NumberBase::Decimal as _).is_some());
         };
 
-        let span = self.input.span_from(start_pos);
-        let text = &self.input.src[span.as_range()];
+        let span = self.cursor.span_after(start_pos);
+        let text = &self.cursor.src[span.as_range()];
         if has_decimal_point || has_exp {
             let options = lexical::ParseFloatOptions::default();
             lexical::parse_with_options::<f64, _, GO_LITERAL>(text, &options)
@@ -549,16 +565,74 @@ impl<'src> Lexer<'src> {
         }
     }
 
+    /// If the pattern matches at the current position, advances the input
+    /// cursor and returns true; otherwise, returns false.
+    fn eat(&mut self, pat: impl Pattern<'src>) -> bool {
+        if self.at(pat) {
+            for _ in 0..pat.match_len() {
+                self.cursor.bump();
+            }
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Indicates whether the pattern matches at the current position.
+    fn at(&mut self, pat: impl Pattern<'src>) -> bool {
+        pat.is_prefix_of(self.cursor.remaining())
+    }
+
     /// Creates a new token with the given kind spanning from the end of the
     /// previous token created to the current position.
     fn mk_tok(&mut self, kind: TokenKind) -> Token {
-        let token = Token::new(kind, self.input.span_from(self.cur_tok_start));
-        self.cur_tok_start = self.input.pos;
+        let token = Token::new(kind, self.cursor.span_after(self.cur_tok_start));
+        self.cur_tok_start = self.cursor.pos;
         token
     }
 
     fn add_diagnostic(&mut self, diagnostic: Diagnostic) {
         self.diagnostics.push(diagnostic);
+    }
+}
+
+/// A string pattern. Similar to [std::str::pattern::Pattern], but usable on
+/// stable Rust.
+pub(crate) trait Pattern<'a>: Sized + Copy {
+    /// Indicates whether the pattern matches at the start of the haystack.
+    fn is_prefix_of(self, haystack: &'a str) -> bool;
+
+    /// Returns the number of characters matched by this pattern.
+    fn match_len(self) -> usize;
+}
+
+impl<'a, 'b> Pattern<'a> for &'a str {
+    fn is_prefix_of(self, haystack: &'a str) -> bool {
+        haystack.starts_with(self)
+    }
+
+    fn match_len(self) -> usize {
+        self.chars().count()
+    }
+}
+
+impl<'a> Pattern<'a> for char {
+    fn is_prefix_of(self, haystack: &'a str) -> bool {
+        haystack.starts_with(self)
+    }
+
+    fn match_len(self) -> usize {
+        1
+    }
+}
+
+impl<'a, const N: usize> Pattern<'a> for &'a [char; N] {
+    fn is_prefix_of(self, haystack: &'a str) -> bool {
+        haystack.starts_with(self)
+    }
+
+    fn match_len(self) -> usize {
+        1
     }
 }
 
