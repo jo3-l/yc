@@ -389,6 +389,7 @@ macro_rules! define_lit {
         $(#[$attr])*
         #[derive(Clone, Debug)]
         pub struct $name {
+            pub node_id: NodeId,
             pub span: Span,
             pub val: $t,
         }
@@ -470,7 +471,7 @@ pub struct FieldAccessOrMethodCallExpr {
     pub node_id: NodeId,
     pub span: Span,
     pub obj: SelectorTarget,
-    pub selector: ParsedFragment<Ident>,
+    pub selector: ParsedFragment<String>,
     pub call_args: Vec<Expr>,
 }
 
