@@ -70,3 +70,54 @@ pub enum TokenKind {
     Invalid,
     Eof,
 }
+
+impl TokenKind {
+    /// Returns a string representation of this token kind suitable for usage in
+    /// diagnostics.
+    pub fn describe(&self) -> &str {
+        use TokenKind::*;
+        match self {
+            BoolLiteral(_) => "boolean literal",
+            CharLiteral(_) => "character literal",
+            FloatLiteral(_) => "floating-point literal",
+            IntLiteral(_) => "integer literal",
+
+            Assign => "`=`",
+            Comma => "`,`",
+            Comment(_) => "comment",
+            Declare => "`:=`",
+            Field(_) => "field access",
+            Ident(_) => "identifier",
+            LeftActionDelim(_) => "left action delimiter",
+            LeftParen => "`(`",
+            Pipe => "`|`",
+            RawString(_) => "raw string literal",
+            RightActionDelim(_) => "right action delimiter",
+            RightParen => "`)`",
+            String(_) => "quoted string literal",
+            Text(_) => "text",
+            Variable(_) => "variable",
+            Whitespace(_) => "whitespace",
+
+            Block => "`block`",
+            Break => "`break`",
+            Catch => "`catch`",
+            Continue => "`continue`",
+            Define => "`define`",
+            Dot => "`.`",
+            Else => "`else`",
+            End => "`end`",
+            If => "`if`",
+            Nil => "`nil`",
+            Range => "`range`",
+            Return => "`return`",
+            Template => "`template`",
+            Try => "`try`",
+            While => "`while`",
+            With => "`with`",
+
+            Invalid => "<invalid token>",
+            Eof => "EOF",
+        }
+    }
+}
