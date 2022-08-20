@@ -346,8 +346,7 @@ impl<'src> Lexer<'src> {
         self.input.must_consume('\'');
         let kind = self
             .read_char(ReadCharContext::CharLiteral, start_span)
-            .map(|c| TokenKind::CharLiteral(c))
-            .unwrap_or(TokenKind::Invalid);
+            .map_or(TokenKind::Invalid, TokenKind::CharLiteral);
 
         if !self.input.accept('\'') {
             self.add_diagnostic(
