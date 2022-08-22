@@ -1,3 +1,6 @@
+mod action;
+mod expr;
+mod lit;
 mod token_cursor;
 
 use yc_ast::ast;
