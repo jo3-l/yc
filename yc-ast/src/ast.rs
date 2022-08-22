@@ -65,7 +65,7 @@ impl Action {
 /// action are considered to be text.
 #[derive(Clone, Debug)]
 pub struct Text {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     pub content: String,
 }
@@ -79,7 +79,7 @@ pub struct Text {
 /// ```
 #[derive(Clone, Debug)]
 pub struct BlockAction {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     /// The trim markers associated with the `{{block}}` action.
     pub trim_markers: TrimMarkers,
@@ -97,7 +97,7 @@ pub struct BlockAction {
 /// ```
 #[derive(Clone, Debug)]
 pub struct DefineAction {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     /// The trim markers associated with the `{{define}}` action.
     pub trim_markers: TrimMarkers,
@@ -116,7 +116,7 @@ pub struct DefineAction {
 /// ```
 #[derive(Clone, Debug)]
 pub struct ConditionalBranchAction {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub kind: BranchKind,
     pub span: Span,
     /// The trim markers associated with the `{{if}}` action.
@@ -141,7 +141,7 @@ pub enum BranchKind {
 /// ```
 #[derive(Clone, Debug)]
 pub struct ConditionalElseBranch {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     /// The trim markers associated with the `{{else}}` action.
     pub trim_markers: TrimMarkers,
@@ -162,7 +162,7 @@ pub struct ConditionalElseBranch {
 /// ```
 #[derive(Clone, Debug)]
 pub struct RangeAction {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     /// The trim markers associated with the `{{range}}` action.
     pub trim_markers: TrimMarkers,
@@ -184,7 +184,7 @@ pub struct RangeAction {
 /// ```
 #[derive(Clone, Debug)]
 pub struct WhileAction {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     /// The trim markers associated with the `{{while}}` action.
     pub trim_markers: TrimMarkers,
@@ -202,7 +202,7 @@ pub struct WhileAction {
 /// ```
 #[derive(Clone, Debug)]
 pub struct LoopElseBranch {
-    pub node_id: NodeId,
+    pub id: NodeId,
     /// The trim markers associated with the `{{else}}` action.
     pub trim_markers: TrimMarkers,
     pub body: Vec<Action>,
@@ -215,7 +215,7 @@ pub struct LoopElseBranch {
 /// ```
 #[derive(Clone, Debug)]
 pub struct LoopControlAction {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     pub kind: LoopControlKind,
     pub trim_markers: TrimMarkers,
@@ -238,7 +238,7 @@ pub enum LoopControlKind {
 /// ```
 #[derive(Clone, Debug)]
 pub struct TryAction {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     /// The trim markers associated with the `{{try}}` action.
     pub trim_markers: TrimMarkers,
@@ -255,7 +255,7 @@ pub struct TryAction {
 /// ```
 #[derive(Clone, Debug)]
 pub struct CatchAction {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     pub trim_markers: TrimMarkers,
 }
@@ -267,7 +267,7 @@ pub struct CatchAction {
 /// ```
 #[derive(Clone, Debug)]
 pub struct EndOfAction {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     pub trim_markers: TrimMarkers,
 }
@@ -280,7 +280,7 @@ pub struct EndOfAction {
 /// ```
 #[derive(Clone, Debug)]
 pub struct ReturnAction {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     pub trim_markers: TrimMarkers,
     pub expr: Option<Expr>,
@@ -294,7 +294,7 @@ pub struct ReturnAction {
 /// ```
 #[derive(Clone, Debug)]
 pub struct ExprAction {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     pub expr: Expr,
     pub trim_markers: TrimMarkers,
@@ -321,7 +321,7 @@ bitflags! {
 /// they appear as part of other actions.
 #[derive(Clone, Debug)]
 pub struct Comment {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     pub trim_markers: TrimMarkers,
     pub content: String,
@@ -389,7 +389,7 @@ macro_rules! define_lit {
         $(#[$attr])*
         #[derive(Clone, Debug)]
         pub struct $name {
-            pub node_id: NodeId,
+            pub id: NodeId,
             pub span: Span,
             pub val: $t,
         }
@@ -427,7 +427,7 @@ define_lit! {
 /// equivalent](https://go.dev/ref/spec#String_literals).
 #[derive(Clone, Debug)]
 pub struct StringLit {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     pub kind: StringLitKind,
     pub val: String,
@@ -446,7 +446,7 @@ pub enum StringLitKind {
 /// ```
 #[derive(Clone, Debug)]
 pub struct NilLit {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
 }
 
@@ -457,7 +457,7 @@ pub struct NilLit {
 /// ```
 #[derive(Clone, Debug)]
 pub struct ContextAccessExpr {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
 }
 
@@ -468,7 +468,7 @@ pub struct ContextAccessExpr {
 /// ```
 #[derive(Clone, Debug)]
 pub struct FieldAccessOrMethodCallExpr {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     pub obj: SelectorTarget,
     pub selector: ParsedFragment<String>,
@@ -491,7 +491,7 @@ pub enum SelectorTarget {
 /// ```
 #[derive(Clone, Debug)]
 pub struct VarAssignExpr {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     pub name: VarName,
     pub expr: ParsedFragment<Box<Expr>>,
@@ -504,7 +504,7 @@ pub struct VarAssignExpr {
 /// ```
 #[derive(Clone, Debug)]
 pub struct VarDefExpr {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     pub name: VarName,
     pub expr: ParsedFragment<Box<Expr>>,
@@ -517,7 +517,7 @@ pub struct VarDefExpr {
 /// ```
 #[derive(Clone, Debug)]
 pub struct VarRefExpr {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     pub name: VarName,
 }
@@ -540,7 +540,7 @@ pub struct VarName {
 /// ```
 #[derive(Clone, Debug)]
 pub struct FnCallExpr {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     pub name: Ident,
     pub args: Vec<Expr>,
@@ -561,7 +561,7 @@ pub struct Ident {
 /// ```
 #[derive(Clone, Debug)]
 pub struct ExprPipeline {
-    pub node_id: NodeId,
+    pub id: NodeId,
     pub span: Span,
     pub init: ParsedFragment<Box<Expr>>,
     pub calls: Vec<FnCallExpr>,
