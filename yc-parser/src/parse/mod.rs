@@ -6,20 +6,22 @@ mod token_cursor;
 use yc_ast::ast;
 use yc_ast::node_id::NodeId;
 use yc_ast::token::{Token, TokenKind};
-use yc_diagnostics::Diagnostic;
+use yc_diagnostics::{Diagnostic, FileId};
 
 use crate::lex::Lexer;
 use crate::parse::token_cursor::TokenCursor;
 
 pub struct Parser<'src> {
+    file_id: FileId,
     cursor: TokenCursor<'src>,
     diagnostics: Vec<Diagnostic>,
     node_id: NodeId,
 }
 
 impl<'src> Parser<'src> {
-    pub fn new(lexer: Lexer<'src>) -> Self {
+    pub fn new(file_id: FileId, lexer: Lexer<'src>) -> Self {
         Self {
+            file_id,
             cursor: TokenCursor::new(lexer),
             diagnostics: vec![],
             node_id: NodeId::from_usize(0),
