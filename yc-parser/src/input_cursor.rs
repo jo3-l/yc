@@ -42,15 +42,6 @@ impl<'src> InputCursor<'src> {
         )
     }
 
-    /// Returns the span associated with the previous character read.
-    pub(crate) fn prev_span(&self) -> Option<Span> {
-        let prev_width = self.src[..self.pos.as_usize()]
-            .chars()
-            .next_back()
-            .map(|c| c.len_utf8())?;
-        Some(Span::new(self.pos - prev_width, self.pos))
-    }
-
     /// Retrieves but does not consume the `n`th character starting from the
     /// current position, where `n` starts at 0.
     pub(crate) fn nth(&self, n: usize) -> Option<char> {
@@ -60,6 +51,13 @@ impl<'src> InputCursor<'src> {
     /// Advances the position of the cursor by one character.
     pub(crate) fn bump(&mut self) {
         self.pos += self.first().map_or(0, |c| c.len_utf8())
+    }
+
+    /// Advances the position of the cursor by `n` characters.
+    pub(crate) fn bump_n(&mut self, n: usize) {
+        for _ in 0..n {
+            self.bump();
+        }
     }
 
     /// Advances the position of the cursor as long as the predicate returns

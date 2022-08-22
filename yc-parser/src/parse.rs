@@ -4,10 +4,10 @@ use yc_ast::node_id::NodeId;
 use yc_diagnostics::Diagnostic;
 
 use crate::lex::Lexer;
-use crate::token_source::TokenSource;
+use crate::token_cursor::TokenCursor;
 
 pub struct Parser<'src> {
-    tokens: TokenSource<'src>,
+    tokens: TokenCursor<'src>,
     diagnostics: Vec<Diagnostic>,
     node_id: NodeId,
 }
@@ -15,7 +15,7 @@ pub struct Parser<'src> {
 impl<'src> Parser<'src> {
     pub fn new(lexer: Lexer<'src>) -> Self {
         Self {
-            tokens: TokenSource::new(lexer),
+            tokens: TokenCursor::new(lexer),
             diagnostics: vec![],
             node_id: NodeId::from_usize(0),
         }

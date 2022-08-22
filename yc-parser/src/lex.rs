@@ -1,10 +1,7 @@
 use core::fmt;
-use std::cmp::Ordering;
 use std::fmt::Display;
 
-use indoc::indoc;
-use lexical::format::GO_LITERAL;
-use yc_ast::location::{BytePos, Span};
+use yc_ast::location::BytePos;
 use yc_ast::token::{Token, TokenKind};
 use yc_diagnostics::{Diagnostic, FileId};
 
@@ -19,18 +16,12 @@ const RIGHT_ACTION_DELIM: &'static str = "}}";
 const LEFT_TRIM_MARKER: &'static str = "- ";
 const RIGHT_TRIM_MARKER: &'static str = " -";
 
-/// Contexts in which tokens can be scanned.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum LexContext {
     Action,
     Comment,
+    #[default]
     Text,
-}
-
-impl Default for LexContext {
-    fn default() -> Self {
-        Self::Text
-    }
 }
 
 /// An error-tolerant lexer for YAGPDB-flavored Go templates.
@@ -73,9 +64,10 @@ impl<'src> Lexer<'src> {
     /// [TokenKind::Eof] will be returned.
     pub fn next_token(&mut self) -> Token {
         if self.at_eof() {
-            self.mk_tok(TokenKind::Eof)
-        } else if self.at_start_of_action() {
-            self.lex_start_of_action()
+            self.emit(TokenKind::Eof)
+        } else if self.eat(LEFT_ACTION_DELIM) {
+            self.ctx = LexContext::Action;
+            self.emit(TokenKind::LeftActionDelim)
         } else {
             match self.ctx {
                 LexContext::Action => self.lex_in_action(),
@@ -87,55 +79,87 @@ impl<'src> Lexer<'src> {
 
     /// Lexes a piece of literal text.
     fn lex_text(&mut self) -> Token {
-        let mut text = String::new();
         while !self.cursor.at_eof() && !self.at(LEFT_ACTION_DELIM) {
-            text.push(self.cursor.first().unwrap());
             self.cursor.bump();
         }
-        self.mk_tok(TokenKind::Text(text))
+        self.emit(TokenKind::Text)
     }
 
     /// Lexes a production within an action.
     fn lex_in_action(&mut self) -> Token {
-        if self.at_end_of_action() {
-            return self.lex_end_of_action();
-        }
-
         match self.cursor.first().unwrap() {
-            ' ' | '\t' | '\r' | '\n' => self.lex_whitespace(),
+            '/' => {
+                if self.cursor.nth(1) == Some('*') {
+                    self.lex_comment()
+                } else {
+                    self.cursor.bump();
+                    self.add_diagnostic(
+                        Diagnostic::error(self.file_id, "expected `*` after `/`")
+                            .primary_span(self.cursor.span()),
+                    );
+                    self.emit(TokenKind::Invalid)
+                }
+            }
+            ' ' => {
+                if self.cursor.nth(1) == Some('-') {
+                    self.cursor.bump_n(2);
+                    self.emit(TokenKind::RightTrimMarker)
+                } else {
+                    self.lex_whitespace()
+                }
+            }
+            '\t' | '\r' | '\n' => self.lex_whitespace(),
             '=' => self.bump_and_emit(TokenKind::Assign),
             ':' => {
-                let start = self.cursor.pos;
                 self.cursor.bump();
                 if self.eat('=') {
-                    self.mk_tok(TokenKind::Declare)
+                    self.emit(TokenKind::Declare)
                 } else {
                     self.add_diagnostic(
-                        Diagnostic::error(self.file_id, "expected declaration")
-                            .primary_span(self.cursor.span_after(start)),
+                        Diagnostic::error(self.file_id, "expected `=` after `:`")
+                            .primary_span(self.cursor.span()),
                     );
-                    self.mk_tok(TokenKind::Invalid)
+                    self.emit(TokenKind::Invalid)
                 }
             }
             '|' => self.bump_and_emit(TokenKind::Pipe),
             '"' => self.lex_string(),
-            '`' => self.lex_raw_string(),
+            '`' => self.lex_raw_string_lit(),
             '$' => self.lex_variable(),
             '\'' => self.lex_char_lit(),
             '.' => {
-                // A '.' can begin a field or a numeric literal. Look at the
-                // next character to disambiguate.
                 let followed_by_digit = self.cursor.nth(1).filter(|c| c.is_ascii_digit()).is_some();
                 if followed_by_digit {
                     self.lex_numeric_literal()
                 } else {
-                    self.lex_field()
+                    self.bump_and_emit(TokenKind::Dot)
                 }
             }
-            '+' | '-' | '0'..='9' => self.lex_numeric_literal(),
+            '-' => {
+                if self.cursor.nth(1) == Some(' ') {
+                    self.cursor.bump_n(2);
+                    self.emit(TokenKind::LeftTrimMarker)
+                } else {
+                    self.lex_numeric_literal()
+                }
+            }
+            '+' | '0'..='9' => self.lex_numeric_literal(),
             '(' => self.bump_and_emit(TokenKind::LeftParen),
             ')' => self.bump_and_emit(TokenKind::RightParen),
             ',' => self.bump_and_emit(TokenKind::Comma),
+            '}' => {
+                self.cursor.bump();
+                if self.eat('}') {
+                    self.ctx = LexContext::Text;
+                    self.emit(TokenKind::RightActionDelim)
+                } else {
+                    self.add_diagnostic(
+                        Diagnostic::error(self.file_id, "expected `}` after `}`")
+                            .primary_span(self.cursor.span()),
+                    );
+                    self.emit(TokenKind::Invalid)
+                }
+            }
             c if c == '_' || c.is_alphanumeric() => self.lex_ident(),
             _ => {
                 self.add_diagnostic(
@@ -143,7 +167,7 @@ impl<'src> Lexer<'src> {
                         .primary_span(self.cursor.span()),
                 );
                 self.cursor.bump();
-                self.mk_tok(TokenKind::Invalid)
+                self.emit(TokenKind::Invalid)
             }
         }
     }
@@ -151,78 +175,18 @@ impl<'src> Lexer<'src> {
     /// Bumps the cursor to the next position and returns the token passed in.
     fn bump_and_emit(&mut self, tok: TokenKind) -> Token {
         self.cursor.bump();
-        self.mk_tok(tok)
-    }
-
-    /// Indicates whether an action starts at the current position.
-    fn at_start_of_action(&mut self) -> bool {
-        self.at(LEFT_ACTION_DELIM)
-    }
-
-    /// Lexes the start of an action. The left action delimiter is known to be present.
-    fn lex_start_of_action(&mut self) -> Token {
-        assert!(self.eat(LEFT_ACTION_DELIM));
-        let has_trim_marker = self.eat(LEFT_TRIM_MARKER);
-        self.ctx = if self.at(LEFT_COMMENT_MARKER) {
-            LexContext::Comment
-        } else {
-            LexContext::Action
-        };
-        self.mk_tok(TokenKind::LeftActionDelim(has_trim_marker))
-    }
-
-    /// Indicates whether an action ends at the current position.
-    fn at_end_of_action(&mut self) -> bool {
-        self.at(RIGHT_ACTION_DELIM) || self.at(RIGHT_TRIM_MARKER)
-    }
-
-    /// Lexes the end of an action. Either the right trim marker or
-    /// the right action delimiter is known to be present.
-    fn lex_end_of_action(&mut self) -> Token {
-        let start_pos = self.cursor.pos;
-        let has_trim_marker = self.eat(RIGHT_TRIM_MARKER);
-        let has_right_delim = self.eat(RIGHT_ACTION_DELIM);
-        if has_trim_marker && !has_right_delim {
-            self.add_diagnostic(
-                Diagnostic::error(
-                    self.file_id,
-                    "expected right action delimiter to appear immediately after trim marker",
-                )
-                .primary(
-                    self.cursor.span_after(start_pos),
-                    "expected a right action delimiter after this",
-                ),
-            );
-            self.mk_tok(TokenKind::Invalid)
-        } else {
-            assert!(has_right_delim);
-            self.ctx = LexContext::Text;
-            self.mk_tok(TokenKind::RightActionDelim(has_trim_marker))
-        }
+        self.emit(tok)
     }
 
     /// Lexes a comment. The left comment marker is known to be present.
     fn lex_comment(&mut self) -> Token {
         let start_span = self.cursor.span();
         assert!(self.eat(LEFT_COMMENT_MARKER));
-
-        let mut comment_text = String::new();
         while !self.at_eof() && !self.at(RIGHT_COMMENT_MARKER) {
-            comment_text.push(self.cursor.first().unwrap());
             self.cursor.bump();
         }
 
-        if self.eat(RIGHT_COMMENT_MARKER) {
-            self.ctx = LexContext::Action;
-            if !self.at_end_of_action() {
-                self.add_diagnostic(
-                    Diagnostic::error(self.file_id, "comment ends before closing delimiter")
-                        .primary(self.cursor.prev_span().unwrap(), "...and ends here")
-                        .secondary(start_span, "the comment starts here")
-                        .footer_note("note: comments cannot appear inside other actions"),
-                );
-            }
-        } else {
+        if !self.eat(RIGHT_COMMENT_MARKER) {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unclosed comment")
                     .primary(self.cursor.span(), "...but the file ends here")
@@ -231,113 +195,66 @@ impl<'src> Lexer<'src> {
             );
         }
 
-        self.mk_tok(TokenKind::Comment(comment_text))
+        self.ctx = LexContext::Action;
+        self.emit(TokenKind::Comment)
     }
 
     /// Lexes a run of whitespace within an action.
     fn lex_whitespace(&mut self) -> Token {
-        let mut whitespace = String::new();
-        while let Some(c) = self
-            .cursor
-            .first()
-            .filter(|c| matches!(c, ' ' | '\t' | '\r' | '\n'))
-        {
-            whitespace.push(c);
-            self.cursor.bump();
-        }
-        self.mk_tok(TokenKind::Whitespace(whitespace))
+        self.cursor
+            .bump_while(|c| matches!(c, ' ' | '\t' | '\r' | '\n'));
+        self.emit(TokenKind::Whitespace)
     }
 
     /// Lexes an identifier.
     fn lex_ident(&mut self) -> Token {
-        let ident = self.read_ident();
-        self.expect_terminator();
+        let start_pos = self.cursor.pos;
+        self.cursor.bump_while(|c| c.is_alphanumeric() || c == '_');
 
         use TokenKind::*;
-        self.mk_tok(match ident.as_str() {
-            "block" => Block,
-            "break" => Break,
-            "catch" => Catch,
-            "continue" => Continue,
-            "define" => Define,
-            "else" => Else,
-            "end" => End,
-            "if" => If,
-            "nil" => Nil,
-            "range" => Range,
-            "return" => Return,
-            "template" => Template,
-            "try" => Try,
-            "while" => While,
-            "with" => With,
-            "true" => BoolLiteral(true),
-            "false" => BoolLiteral(false),
-            _ => Ident(ident),
-        })
+        self.emit(
+            match &self.source()[self.cursor.span_after(start_pos).as_range()] {
+                "block" => Block,
+                "break" => Break,
+                "catch" => Catch,
+                "continue" => Continue,
+                "define" => Define,
+                "else" => Else,
+                "end" => End,
+                "if" => If,
+                "nil" => Nil,
+                "range" => Range,
+                "return" => Return,
+                "template" => Template,
+                "try" => Try,
+                "while" => While,
+                "with" => With,
+                "true" | "false" => BoolLit,
+                _ => Ident,
+            },
+        )
     }
 
     /// Lexes a variable. The '$' is known to be present.
     fn lex_variable(&mut self) -> Token {
         assert!(self.eat('$'));
-        let var_name = self.read_ident();
-        self.expect_terminator();
-        self.mk_tok(TokenKind::Variable(var_name))
-    }
-
-    /// Lexes a field. The '.' is known to be present.
-    fn lex_field(&mut self) -> Token {
-        assert!(self.eat('.'));
-        let field_name = self.read_ident();
-        self.expect_terminator();
-        self.mk_tok(if field_name.is_empty() {
-            TokenKind::Dot
-        } else {
-            TokenKind::Field(field_name)
-        })
-    }
-
-    fn read_ident(&mut self) -> String {
-        let mut ident = String::new();
-        while let Some(c) = self
-            .cursor
-            .first()
-            .filter(|c| c == &'_' || c.is_alphanumeric())
-        {
-            ident.push(c);
-            self.cursor.bump();
-        }
-        ident
-    }
-
-    /// Emits a diagnostic if the next character isn't a terminator.
-    fn expect_terminator(&mut self) {
-        // Note that if `RIGHT_ACTION_DELIM` is modified, the } here must be
-        // changed appropriately as well.
-        if !matches!(
-            self.cursor.first(),
-            Some(' ' | '\t' | '\r' | '\n' | '.' | ',' | ':' | ')' | '(' | '}') | None
-        ) {
-            self.add_diagnostic(
-                Diagnostic::error(self.file_id, "expected terminating character")
-                    .primary_span(self.cursor.span()),
-            );
-            self.cursor.bump();
-        }
+        self.cursor.bump_while(|c| c.is_alphanumeric() || c == '_');
+        self.emit(TokenKind::Variable)
     }
 
     /// Lexes a quoted string literal. The left quotation mark is known to be
-    /// present.
+    /// present. Syntax validation is performed by the parser.
     fn lex_string(&mut self) -> Token {
         let start_span = self.cursor.span();
         assert!(self.eat('"'));
 
-        let mut content = String::new();
-        while !self.at_eof() && !self.eat('"') {
-            if let Ok(c) = self.read_char(ReadCharContext::QuotedString, start_span) {
-                content.push(c);
+        while !self.at_eof() && !self.at('"') {
+            if self.at('\\') {
+                self.cursor.bump();
             }
+            self.cursor.bump();
         }
-        if self.at_eof() {
+        if !self.eat('"') {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unterminated quoted string")
                     .primary(self.cursor.span(), "...but the file ends here")
@@ -345,18 +262,21 @@ impl<'src> Lexer<'src> {
                     .footer_note(r#"help: use " to close the string"#),
             );
         }
-        self.mk_tok(TokenKind::String(content))
+        self.emit(TokenKind::QuotedStringLit)
     }
 
     /// Lexes a character literal. The left quotation mark is known to be
-    /// present.
+    /// present. Syntax validation is performed by the parser.
     fn lex_char_lit(&mut self) -> Token {
         let start_span = self.cursor.span();
         assert!(self.eat('\''));
 
-        let kind = self
-            .read_char(ReadCharContext::CharLiteral, start_span)
-            .map_or(TokenKind::Invalid, TokenKind::CharLiteral);
+        while !self.at_eof() && !self.at('\'') {
+            if self.at('\\') {
+                self.cursor.bump();
+            }
+            self.cursor.bump();
+        }
         if !self.eat('\'') {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unterminated character literal")
@@ -365,133 +285,15 @@ impl<'src> Lexer<'src> {
                     .footer_note("help: use ' to close the character literal"),
             );
         }
-        self.mk_tok(kind)
-    }
-
-    /// Reads a character within a character literal or a quoted string literal,
-    /// which may be represented by an escape sequence.
-    fn read_char(&mut self, ctx: ReadCharContext, open_delim_span: Span) -> Result<char, ()> {
-        let first = self.cursor.first().unwrap();
-        let span_of_first = self.cursor.span();
-        self.cursor.bump();
-        if first != '\\' {
-            if first == '\n' {
-                let mut err =
-                    Diagnostic::error(self.file_id, format!("unexpected newline in {ctx}"))
-                        .primary(span_of_first, "...and the newline appears here")
-                        .secondary(open_delim_span, format!("the {ctx} starts here"));
-                if ctx == ReadCharContext::QuotedString {
-                    err = err.footer_note(indoc! {r#"
-                        help: to create a newline, use the escape sequence `\n`
-                            alternately, use a raw string literal, which allows newlines to be inserted directly
-                    "#});
-                }
-
-                self.add_diagnostic(err);
-            }
-            return Ok(first);
-        }
-
-        let escapee = self.cursor.first().ok_or_else(|| {
-            self.add_diagnostic(
-                Diagnostic::error(self.file_id, "expected escape sequence")
-                    .primary(self.cursor.span(), "...but the file ends here")
-                    .secondary(
-                        span_of_first,
-                        "the backslash here begins an escape sequence",
-                    ),
-            );
-        })?;
-        let span_of_escapee = self.cursor.span();
-        self.cursor.bump();
-        Ok(match escapee {
-            'a' => '\x07',
-            'b' => '\x08',
-            'f' => '\x0c',
-            'n' => '\n',
-            'r' => '\r',
-            't' => '\t',
-            '\\' => '\\',
-            '0' => '\0',
-
-            'x' => self.read_multi_digit_escape(span_of_first.start, 0, 2, NumberBase::Hex)?,
-            'u' => self.read_multi_digit_escape(span_of_first.start, 0, 4, NumberBase::Hex)?,
-            'U' => self.read_multi_digit_escape(span_of_first.start, 0, 8, NumberBase::Hex)?,
-            '0'..='7' => self.read_multi_digit_escape(
-                span_of_first.start,
-                escapee.to_digit(8).unwrap(),
-                2,
-                NumberBase::Octal,
-            )?,
-            _ if escapee == ctx.delim() => ctx.delim(),
-            _ => {
-                self.add_diagnostic(
-                    Diagnostic::error(self.file_id, "unrecognized escape character")
-                        .primary_span(span_of_escapee),
-                );
-                return Err(());
-            }
-        })
-    }
-
-    /// Reads a multi-digit character escape sequence within a character literal
-    /// or a quoted string literal.
-    fn read_multi_digit_escape(
-        &mut self,
-        start_pos: BytePos,
-        initial_value: u32,
-        expected_digits: usize,
-        base: NumberBase,
-    ) -> Result<char, ()> {
-        let mut digits = vec![];
-        while let Some(c) = self.cursor.first().and_then(|c| c.to_digit(base as _)) {
-            digits.push(c);
-            self.cursor.bump();
-        }
-
-        match digits.len().cmp(&expected_digits) {
-            Ordering::Less => {
-                self.add_diagnostic(
-                    Diagnostic::error(self.file_id, "too few digits in escape sequence")
-                        .primary_span(self.cursor.span_after(start_pos)),
-                );
-                Err(())
-            }
-            Ordering::Equal => {
-                let val = digits
-                    .iter()
-                    .fold(initial_value, |acc, digit| &acc * base as u32 + digit);
-                Ok(char::from_u32(val).ok_or_else(|| {
-                    self.add_diagnostic(
-                        Diagnostic::error(
-                            self.file_id,
-                            "escape sequence results in invalid character",
-                        )
-                        .primary_span(self.cursor.span_after(start_pos))
-                        .footer_note("note: valid characters are in the range 0 to Ox10FFFF, inclusive, excluding surrogate code points (0xD800 to 0xDFFF)"),
-                    );
-                })?)
-            }
-            Ordering::Greater => {
-                self.add_diagnostic(
-                    Diagnostic::error(self.file_id, "too many digits in escape sequence")
-                        .primary_span(self.cursor.span_after(start_pos)),
-                );
-                Err(())
-            }
-        }
+        self.emit(TokenKind::CharLit)
     }
 
     /// Lexes a raw string literal. The opening backtick is known to be present.
-    fn lex_raw_string(&mut self) -> Token {
+    fn lex_raw_string_lit(&mut self) -> Token {
         let start_span = self.cursor.span();
         assert!(self.eat('`'));
-        let mut content = String::new();
-        while let Some(c) = self.cursor.first().filter(|c| c != &'`') {
-            content.push(c);
-            self.cursor.bump();
-        }
 
+        self.cursor.bump_while(|c| c != '`');
         if !self.eat('`') {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unterminated raw quoted string")
@@ -499,7 +301,7 @@ impl<'src> Lexer<'src> {
                     .secondary(start_span, "the string starts here"),
             );
         }
-        self.mk_tok(TokenKind::RawString(content))
+        self.emit(TokenKind::RawStringLit)
     }
 
     /// Lexes a numeric literal.
@@ -511,63 +313,44 @@ impl<'src> Lexer<'src> {
         self.eat(&['+', '-']);
         let base = if self.eat('0') {
             if self.eat(&['x', 'X']) {
-                NumberBase::Hex
+                16
             } else if self.eat(&['o', 'O']) {
-                NumberBase::Octal
+                8
             } else if self.eat(&['b', 'B']) {
-                NumberBase::Binary
+                2
             } else {
-                NumberBase::Decimal
+                10
             }
         } else {
-            NumberBase::Decimal
+            10
         };
 
         self.cursor.bump_while(|c| c.to_digit(base as _).is_some());
         let has_decimal_point = self.eat('.');
         if has_decimal_point {
-            self.cursor
-                .bump_while(|c| c.to_digit(NumberBase::Decimal as _).is_some());
+            self.cursor.bump_while(|c| c.to_digit(10).is_some());
         };
 
         let has_exp = match base {
-            NumberBase::Decimal => self.eat(&['e', 'E']),
-            NumberBase::Hex => self.eat(&['p', 'P']),
+            10 => self.eat(&['e', 'E']),
+            16 => self.eat(&['p', 'P']),
             _ => false,
         };
         if has_exp {
             self.eat(&['+', '-']);
-            self.cursor
-                .bump_while(|c| c.to_digit(NumberBase::Decimal as _).is_some());
+            self.cursor.bump_while(|c| c.to_digit(10).is_some());
         };
 
-        let span = self.cursor.span_after(start_pos);
-        let text = &self.cursor.src[span.as_range()];
-        if has_decimal_point || has_exp {
-            let options = lexical::ParseFloatOptions::default();
-            lexical::parse_with_options::<f64, _, GO_LITERAL>(text, &options)
-                .map(|val| self.mk_tok(TokenKind::FloatLiteral(val)))
-                .unwrap_or_else(|_| {
-                    self.add_diagnostic(
-                        Diagnostic::error(self.file_id, "invalid number syntax").primary_span(span),
-                    );
-                    self.mk_tok(TokenKind::Invalid)
-                })
+        self.emit(if has_decimal_point || has_exp {
+            TokenKind::FloatLit
         } else {
-            lexical::parse::<i64, _>(text)
-                .map(|val| self.mk_tok(TokenKind::IntLiteral(val)))
-                .unwrap_or_else(|_| {
-                    self.add_diagnostic(
-                        Diagnostic::error(self.file_id, "invalid number syntax").primary_span(span),
-                    );
-                    self.mk_tok(TokenKind::Invalid)
-                })
-        }
+            TokenKind::IntLit
+        })
     }
 
     /// If the pattern matches at the current position, advances the input
     /// cursor and returns true; otherwise, returns false.
-    fn eat(&mut self, pat: impl Pattern<'src>) -> bool {
+    fn eat(&mut self, pat: impl StrPattern<'src>) -> bool {
         if self.at(pat) {
             for _ in 0..pat.match_len() {
                 self.cursor.bump();
@@ -579,13 +362,13 @@ impl<'src> Lexer<'src> {
     }
 
     /// Indicates whether the pattern matches at the current position.
-    fn at(&mut self, pat: impl Pattern<'src>) -> bool {
+    fn at(&mut self, pat: impl StrPattern<'src>) -> bool {
         pat.is_prefix_of(self.cursor.remaining())
     }
 
     /// Creates a new token with the given kind spanning from the end of the
     /// previous token created to the current position.
-    fn mk_tok(&mut self, kind: TokenKind) -> Token {
+    fn emit(&mut self, kind: TokenKind) -> Token {
         let token = Token::new(kind, self.cursor.span_after(self.cur_tok_start));
         self.cur_tok_start = self.cursor.pos;
         token
@@ -598,7 +381,7 @@ impl<'src> Lexer<'src> {
 
 /// A string pattern. Similar to [std::str::pattern::Pattern], but usable on
 /// stable Rust.
-pub(crate) trait Pattern<'a>: Sized + Copy {
+pub(crate) trait StrPattern<'a>: Sized + Copy {
     /// Indicates whether the pattern matches at the start of the haystack.
     fn is_prefix_of(self, haystack: &'a str) -> bool;
 
@@ -606,7 +389,7 @@ pub(crate) trait Pattern<'a>: Sized + Copy {
     fn match_len(self) -> usize;
 }
 
-impl<'a, 'b> Pattern<'a> for &'a str {
+impl<'a, 'b> StrPattern<'a> for &'a str {
     fn is_prefix_of(self, haystack: &'a str) -> bool {
         haystack.starts_with(self)
     }
@@ -616,7 +399,7 @@ impl<'a, 'b> Pattern<'a> for &'a str {
     }
 }
 
-impl<'a> Pattern<'a> for char {
+impl<'a> StrPattern<'a> for char {
     fn is_prefix_of(self, haystack: &'a str) -> bool {
         haystack.starts_with(self)
     }
@@ -626,59 +409,13 @@ impl<'a> Pattern<'a> for char {
     }
 }
 
-impl<'a, const N: usize> Pattern<'a> for &'a [char; N] {
+impl<'a, const N: usize> StrPattern<'a> for &'a [char; N] {
     fn is_prefix_of(self, haystack: &'a str) -> bool {
         haystack.starts_with(self)
     }
 
     fn match_len(self) -> usize {
         1
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum NumberBase {
-    Binary = 2,
-    Octal = 8,
-    Decimal = 10,
-    Hex = 16,
-}
-
-impl Display for NumberBase {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use NumberBase::*;
-        match self {
-            Binary => write!(f, "binary"),
-            Octal => write!(f, "octal"),
-            Decimal => write!(f, "decimal"),
-            Hex => write!(f, "hex"),
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ReadCharContext {
-    QuotedString,
-    CharLiteral,
-}
-
-impl ReadCharContext {
-    fn delim(self) -> char {
-        use ReadCharContext::*;
-        match self {
-            QuotedString => '"',
-            CharLiteral => '\'',
-        }
-    }
-}
-
-impl Display for ReadCharContext {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        use ReadCharContext::*;
-        match self {
-            QuotedString => write!(f, "quoted string"),
-            CharLiteral => write!(f, "character literal"),
-        }
     }
 }
 
@@ -686,27 +423,21 @@ impl Display for ReadCharContext {
 mod tests {
     use std::string::String;
     use std::sync::mpsc;
-    use std::thread;
     use std::time::Duration;
+    use std::{iter, thread};
 
     use pretty_assertions::assert_eq;
     use quickcheck_macros::quickcheck;
-    use yc_ast::location::Span;
-    use yc_ast::token::Token;
-    use yc_ast::token::TokenKind::{self, *};
+    use yc_ast::token::{Token, TokenKind};
     use yc_diagnostics::Diagnostic;
 
     use crate::lex::Lexer;
 
     fn lex(text: &str) -> (Vec<Token>, Vec<Diagnostic>) {
         let mut lexer = Lexer::new(0, text);
-        let mut tokens = vec![];
-        loop {
-            match lexer.next_token() {
-                Token { kind: Eof, .. } => break,
-                token @ Token { .. } => tokens.push(token),
-            }
-        }
+        let tokens = iter::repeat_with(|| lexer.next_token())
+            .take_while(|tok| tok.kind != TokenKind::Eof)
+            .collect();
         (tokens, lexer.finish())
     }
 
@@ -716,8 +447,10 @@ mod tests {
         assert!(errors.is_empty());
     }
 
-    fn tok(kind: TokenKind, span: Span) -> Token {
-        Token::new(kind, span)
+    macro_rules! tok {
+        ($kind:tt @ $start:tt..$end:tt) => {
+            Token::new(TokenKind::$kind, ($start..$end).into())
+        };
     }
 
     #[quickcheck]
@@ -745,15 +478,12 @@ mod tests {
 
     #[test]
     fn spaces_in_text() {
-        assert_lex_ok(" \t\n", vec![tok(Text(" \t\n".to_string()), (0..3).into())]);
+        assert_lex_ok(" \t\n", vec![tok!(Text @ 0..3)]);
     }
 
     #[test]
     fn text() {
-        assert_lex_ok(
-            "now is the time",
-            vec![tok(Text("now is the time".to_string()), (0..15).into())],
-        );
+        assert_lex_ok("now is the time", vec![tok!(Text @ 0..15)]);
     }
 
     #[test]
@@ -761,11 +491,11 @@ mod tests {
         assert_lex_ok(
             "hello-{{/* this is a comment */}}-world",
             vec![
-                tok(Text("hello-".to_string()), (0..6).into()),
-                tok(LeftActionDelim(false), (6..8).into()),
-                tok(Comment(" this is a comment ".to_string()), (8..31).into()),
-                tok(RightActionDelim(false), (31..33).into()),
-                tok(Text("-world".to_string()), (33..39).into()),
+                tok!(Text @ 0..6),
+                tok!(LeftActionDelim @ 6..8),
+                tok!(Comment @ 8..31),
+                tok!(RightActionDelim @ 31..33),
+                tok!(Text @ 33..39),
             ],
         );
     }
@@ -774,10 +504,7 @@ mod tests {
     fn empty_action() {
         assert_lex_ok(
             "{{}}",
-            vec![
-                tok(LeftActionDelim(false), (0..2).into()),
-                tok(RightActionDelim(false), (2..4).into()),
-            ],
+            vec![tok!(LeftActionDelim @ 0..2), tok!(RightActionDelim @ 2..4)],
         );
     }
 
@@ -786,9 +513,9 @@ mod tests {
         assert_lex_ok(
             "{{foo}}",
             vec![
-                tok(LeftActionDelim(false), (0..2).into()),
-                tok(Ident("foo".to_string()), (2..5).into()),
-                tok(RightActionDelim(false), (5..7).into()),
+                tok!(LeftActionDelim @ 0..2),
+                tok!(Ident @ 2..5),
+                tok!(RightActionDelim @ 5..7),
             ],
         );
     }
@@ -798,17 +525,17 @@ mod tests {
         assert_lex_ok(
             "{{((((bar))))}}",
             vec![
-                tok(LeftActionDelim(false), (0..2).into()),
-                tok(LeftParen, (2..3).into()),
-                tok(LeftParen, (3..4).into()),
-                tok(LeftParen, (4..5).into()),
-                tok(LeftParen, (5..6).into()),
-                tok(Ident("bar".to_string()), (6..9).into()),
-                tok(RightParen, (9..10).into()),
-                tok(RightParen, (10..11).into()),
-                tok(RightParen, (11..12).into()),
-                tok(RightParen, (12..13).into()),
-                tok(RightActionDelim(false), (13..15).into()),
+                tok!(LeftActionDelim @ 0..2),
+                tok!(LeftParen @ 2..3),
+                tok!(LeftParen @ 3..4),
+                tok!(LeftParen @ 4..5),
+                tok!(LeftParen @ 5..6),
+                tok!(Ident @ 6..9),
+                tok!(RightParen @ 9..10),
+                tok!(RightParen @ 10..11),
+                tok!(RightParen @ 11..12),
+                tok!(RightParen @ 12..13),
+                tok!(RightActionDelim @ 13..15),
             ],
         );
     }
@@ -818,13 +545,13 @@ mod tests {
         assert_lex_ok(
             r#"{{block "foo" .}}"#,
             vec![
-                tok(LeftActionDelim(false), (0..2).into()),
-                tok(Block, (2..7).into()),
-                tok(Whitespace(" ".to_string()), (7..8).into()),
-                tok(String("foo".to_string()), (8..13).into()),
-                tok(Whitespace(" ".to_string()), (13..14).into()),
-                tok(Dot, (14..15).into()),
-                tok(RightActionDelim(false), (15..17).into()),
+                tok!(LeftActionDelim @ 0..2),
+                tok!(Block @ 2..7),
+                tok!(Whitespace @ 7..8),
+                tok!(QuotedStringLit @ 8..13),
+                tok!(Whitespace @ 13..14),
+                tok!(Dot @ 14..15),
+                tok!(RightActionDelim @ 15..17),
             ],
         );
     }
@@ -834,9 +561,9 @@ mod tests {
         assert_lex_ok(
             r#"{{"abc \n\t\" "}}"#,
             vec![
-                tok(LeftActionDelim(false), (0..2).into()),
-                tok(String("abc \n\t\" ".to_string()), (2..15).into()),
-                tok(RightActionDelim(false), (15..17).into()),
+                tok!(LeftActionDelim @ 0..2),
+                tok!(QuotedStringLit @ 2..15),
+                tok!(RightActionDelim @ 15..17),
             ],
         );
     }
@@ -846,9 +573,9 @@ mod tests {
         assert_lex_ok(
             r#"{{`abc\n\t\" "`}}"#,
             vec![
-                tok(LeftActionDelim(false), (0..2).into()),
-                tok(RawString(r#"abc\n\t\" ""#.to_string()), (2..15).into()),
-                tok(RightActionDelim(false), (15..17).into()),
+                tok!(LeftActionDelim @ 0..2),
+                tok!(RawStringLit @ 2..15),
+                tok!(RightActionDelim @ 15..17),
             ],
         );
     }
@@ -859,12 +586,9 @@ mod tests {
         assert_lex_ok(
             r#"{{`now is{{\n}}the time`}}"#,
             vec![
-                tok(LeftActionDelim(false), (0..2).into()),
-                tok(
-                    RawString(r#"now is{{\n}}the time"#.to_string()),
-                    (2..24).into(),
-                ),
-                tok(RightActionDelim(false), (24..26).into()),
+                tok!(LeftActionDelim @ 0..2),
+                tok!(RawStringLit @ 2..24),
+                tok!(RightActionDelim @ 24..26),
             ],
         );
     }

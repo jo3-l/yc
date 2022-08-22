@@ -1,12 +1,19 @@
 use std::cmp::Ordering;
+use std::fmt::Debug;
 use std::ops::{Add, AddAssign, Range, Sub, SubAssign};
 
 /// A span of text within source code. The span is inclusive on the left end and
 /// exclusive on the right.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub struct Span {
     pub start: BytePos,
     pub end: BytePos,
+}
+
+impl Debug for Span {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}..{:?}", self.start, self.end)
+    }
 }
 
 impl Span {
@@ -71,7 +78,7 @@ impl From<Range<usize>> for Span {
 }
 
 /// A byte offset into source code.
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Eq, PartialEq, PartialOrd, Ord)]
 pub struct BytePos {
     pos: usize,
 }
@@ -83,6 +90,12 @@ impl BytePos {
 
     pub fn as_usize(&self) -> usize {
         self.pos
+    }
+}
+
+impl Debug for BytePos {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.pos)
     }
 }
 

@@ -1,6 +1,8 @@
+use std::fmt::Debug;
+
 use crate::location::Span;
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub struct Token {
     pub kind: TokenKind,
     pub span: Span,
@@ -12,49 +14,43 @@ impl Token {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub enum TokenKind {
-    BoolLiteral(bool),
-    CharLiteral(char),
-    FloatLiteral(f64),
-    IntLiteral(i64),
+impl Debug for Token {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?} @ {:?}", self.kind, self.span)
+    }
+}
 
-    /// `=` introducing an assignment.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum TokenKind {
+    Text,
+
+    BoolLit,
+    CharLit,
+    FloatLit,
+    IntLit,
+    QuotedStringLit,
+    RawStringLit,
+
     Assign,
     Comma,
-    /// A comment. The value is the body of the comment, starting just after the
-    /// left delimiter and ending before the right delimiter.
-    Comment(String),
-    /// `:=` introducing a declaration.
+    Comment,
     Declare,
-    /// An alphanumeric identifier starting with a dot. The value does not
-    /// include the dot.
-    Field(String),
-    /// An alphanumeric identifier not starting with a dot.
-    Ident(String),
-    LeftActionDelim(/* has_trim_marker */ bool),
+    Ident,
+    LeftActionDelim,
+    LeftTrimMarker,
     LeftParen,
     Pipe,
-    /// A raw string literal. The value is the content of the string, not
-    /// including the delimiters.
-    RawString(String),
-    RightActionDelim(/* has_trim_marker */ bool),
+    RightActionDelim,
+    RightTrimMarker,
     RightParen,
-    /// A quoted string literal. The value is the interpreted content of the
-    /// string, not including the delimiters.
-    String(String),
-    Text(String),
-    /// A variable. The value is the name of the variable, not including the '$'.
-    Variable(String),
-    /// Run of spaces separating expressions in a statement.
-    Whitespace(String),
+    Variable,
+    Whitespace,
 
     Block,
     Break,
     Catch,
     Continue,
     Define,
-    /// `.` representing the cursor.
     Dot,
     Else,
     End,
@@ -77,27 +73,29 @@ impl TokenKind {
     pub fn describe(&self) -> &str {
         use TokenKind::*;
         match self {
-            BoolLiteral(_) => "boolean literal",
-            CharLiteral(_) => "character literal",
-            FloatLiteral(_) => "floating-point literal",
-            IntLiteral(_) => "integer literal",
+            Text => "text",
+
+            BoolLit => "boolean literal",
+            CharLit => "character literal",
+            FloatLit => "floating-point literal",
+            IntLit => "integer literal",
+            QuotedStringLit => "quoted string literal",
+            RawStringLit => "raw string literal",
 
             Assign => "`=`",
             Comma => "`,`",
-            Comment(_) => "comment",
+            Comment => "comment",
             Declare => "`:=`",
-            Field(_) => "field access",
-            Ident(_) => "identifier",
-            LeftActionDelim(_) => "left action delimiter",
+            Ident => "identifier",
+            LeftActionDelim => "`{{`",
+            LeftTrimMarker => "`- `",
             LeftParen => "`(`",
             Pipe => "`|`",
-            RawString(_) => "raw string literal",
-            RightActionDelim(_) => "right action delimiter",
+            RightActionDelim => "`}}`",
+            RightTrimMarker => "` -`",
             RightParen => "`)`",
-            String(_) => "quoted string literal",
-            Text(_) => "text",
-            Variable(_) => "variable",
-            Whitespace(_) => "whitespace",
+            Variable => "variable",
+            Whitespace => "whitespace",
 
             Block => "`block`",
             Break => "`break`",
@@ -116,7 +114,7 @@ impl TokenKind {
             While => "`while`",
             With => "`with`",
 
-            Invalid => "<invalid token>",
+            Invalid => "<invalid>",
             Eof => "EOF",
         }
     }
