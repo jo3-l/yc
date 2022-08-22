@@ -83,7 +83,7 @@ impl<'src> Lexer<'src> {
                     self.cursor.bump();
                     self.add_diagnostic(
                         Diagnostic::error(self.file_id, "expected `*` after `/`")
-                            .primary_span(self.cursor.span()),
+                            .with_primary_span(self.cursor.span()),
                     );
                     self.emit(TokenKind::Invalid)
                 }
@@ -105,7 +105,7 @@ impl<'src> Lexer<'src> {
                 } else {
                     self.add_diagnostic(
                         Diagnostic::error(self.file_id, "expected `=` after `:`")
-                            .primary_span(self.cursor.span()),
+                            .with_primary_span(self.cursor.span()),
                     );
                     self.emit(TokenKind::Invalid)
                 }
@@ -143,7 +143,7 @@ impl<'src> Lexer<'src> {
                 } else {
                     self.add_diagnostic(
                         Diagnostic::error(self.file_id, "expected `}` after `}`")
-                            .primary_span(self.cursor.span()),
+                            .with_primary_span(self.cursor.span()),
                     );
                     self.emit(TokenKind::Invalid)
                 }
@@ -152,7 +152,7 @@ impl<'src> Lexer<'src> {
             _ => {
                 self.add_diagnostic(
                     Diagnostic::error(self.file_id, "unrecognized character in action")
-                        .primary_span(self.cursor.span()),
+                        .with_primary_span(self.cursor.span()),
                 );
                 self.cursor.bump();
                 self.emit(TokenKind::Invalid)
@@ -177,9 +177,9 @@ impl<'src> Lexer<'src> {
         if !self.eat("*/") {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unclosed comment")
-                    .primary(self.cursor.span(), "...but the file ends here")
-                    .secondary(start_span, "the comment starts here")
-                    .footer_note("help: use */ to close the comment"),
+                    .with_primary_label(self.cursor.span(), "...but the file ends here")
+                    .with_secondary_label(start_span, "the comment starts here")
+                    .with_footer_note("help: use */ to close the comment"),
             );
         }
 
@@ -245,9 +245,9 @@ impl<'src> Lexer<'src> {
         if !self.eat('"') {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unterminated quoted string")
-                    .primary(self.cursor.span(), "...but the file ends here")
-                    .secondary(start_span, "the string starts here")
-                    .footer_note(r#"help: use " to close the string"#),
+                    .with_primary_label(self.cursor.span(), "...but the file ends here")
+                    .with_secondary_label(start_span, "the string starts here")
+                    .with_footer_note(r#"help: use " to close the string"#),
             );
         }
         self.emit(TokenKind::QuotedStringLit)
@@ -268,9 +268,9 @@ impl<'src> Lexer<'src> {
         if !self.eat('\'') {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unterminated character literal")
-                    .primary(self.cursor.span(), "...and should end here")
-                    .secondary(start_span, "the character literal starts here")
-                    .footer_note("help: use ' to close the character literal"),
+                    .with_primary_label(self.cursor.span(), "...and should end here")
+                    .with_secondary_label(start_span, "the character literal starts here")
+                    .with_footer_note("help: use ' to close the character literal"),
             );
         }
         self.emit(TokenKind::CharLit)
@@ -285,8 +285,8 @@ impl<'src> Lexer<'src> {
         if !self.eat('`') {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unterminated raw quoted string")
-                    .primary(self.cursor.span(), "...but the file ends here")
-                    .secondary(start_span, "the string starts here"),
+                    .with_primary_label(self.cursor.span(), "...but the file ends here")
+                    .with_secondary_label(start_span, "the string starts here"),
             );
         }
         self.emit(TokenKind::RawStringLit)

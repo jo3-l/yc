@@ -41,24 +41,32 @@ impl Diagnostic {
         }
     }
 
-    pub fn code(mut self, code: impl Into<String>) -> Self {
+    pub fn with_error_code(mut self, code: impl Into<String>) -> Self {
         self.code = Some(code.into());
         self
     }
 
-    pub fn primary_span(self, span: impl Into<Range<usize>>) -> Self {
-        self.label(LabelStyle::Primary, span, "")
+    pub fn with_primary_span(self, span: impl Into<Range<usize>>) -> Self {
+        self.with_label(LabelStyle::Primary, span, "")
     }
 
-    pub fn primary(self, span: impl Into<Range<usize>>, message: impl Into<String>) -> Self {
-        self.label(LabelStyle::Primary, span, message)
+    pub fn with_primary_label(
+        self,
+        span: impl Into<Range<usize>>,
+        message: impl Into<String>,
+    ) -> Self {
+        self.with_label(LabelStyle::Primary, span, message)
     }
 
-    pub fn secondary(self, span: impl Into<Range<usize>>, message: impl Into<String>) -> Self {
-        self.label(LabelStyle::Secondary, span, message)
+    pub fn with_secondary_label(
+        self,
+        span: impl Into<Range<usize>>,
+        message: impl Into<String>,
+    ) -> Self {
+        self.with_label(LabelStyle::Secondary, span, message)
     }
 
-    pub fn label(
+    pub fn with_label(
         mut self,
         style: LabelStyle,
         span: impl Into<Range<usize>>,
@@ -73,7 +81,7 @@ impl Diagnostic {
         self
     }
 
-    pub fn footer_note(mut self, note: impl Into<String>) -> Self {
+    pub fn with_footer_note(mut self, note: impl Into<String>) -> Self {
         self.notes.push(note.into());
         self
     }
