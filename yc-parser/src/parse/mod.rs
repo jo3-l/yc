@@ -91,7 +91,7 @@ impl<'a, const N: usize> TokenPattern for &'a [TokenKind; N] {
 }
 
 #[derive(Clone, Debug, Default)]
-struct ParseState {
+pub(crate) struct ParseState {
     defined_vars: Vec<String>,
     loop_depth: usize,
 }
