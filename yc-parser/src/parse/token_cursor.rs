@@ -17,6 +17,10 @@ impl<'src> TokenCursor<'src> {
         }
     }
 
+    pub(crate) fn source(&mut self) -> &'src str {
+        self.lexer.source()
+    }
+
     pub(crate) fn first(&mut self) -> Token {
         self.nth(0)
     }

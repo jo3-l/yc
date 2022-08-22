@@ -1,27 +1,16 @@
-use core::fmt;
-use std::fmt::Display;
+mod input_cursor;
 
 use yc_ast::location::BytePos;
 use yc_ast::token::{Token, TokenKind};
 use yc_diagnostics::{Diagnostic, FileId};
 
-use crate::input_cursor::InputCursor;
-
-const LEFT_COMMENT_MARKER: &'static str = "/*";
-const RIGHT_COMMENT_MARKER: &'static str = "*/";
-
-const LEFT_ACTION_DELIM: &'static str = "{{";
-const RIGHT_ACTION_DELIM: &'static str = "}}";
-
-const LEFT_TRIM_MARKER: &'static str = "- ";
-const RIGHT_TRIM_MARKER: &'static str = " -";
+use crate::lex::input_cursor::InputCursor;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 enum LexContext {
-    Action,
-    Comment,
     #[default]
     Text,
+    Action,
 }
 
 /// An error-tolerant lexer for YAGPDB-flavored Go templates.
@@ -65,13 +54,12 @@ impl<'src> Lexer<'src> {
     pub fn next_token(&mut self) -> Token {
         if self.at_eof() {
             self.emit(TokenKind::Eof)
-        } else if self.eat(LEFT_ACTION_DELIM) {
+        } else if self.eat("{{") {
             self.ctx = LexContext::Action;
             self.emit(TokenKind::LeftActionDelim)
         } else {
             match self.ctx {
                 LexContext::Action => self.lex_in_action(),
-                LexContext::Comment => self.lex_comment(),
                 LexContext::Text => self.lex_text(),
             }
         }
@@ -79,7 +67,7 @@ impl<'src> Lexer<'src> {
 
     /// Lexes a piece of literal text.
     fn lex_text(&mut self) -> Token {
-        while !self.cursor.at_eof() && !self.at(LEFT_ACTION_DELIM) {
+        while !self.cursor.at_eof() && !self.at("{{") {
             self.cursor.bump();
         }
         self.emit(TokenKind::Text)
@@ -181,12 +169,12 @@ impl<'src> Lexer<'src> {
     /// Lexes a comment. The left comment marker is known to be present.
     fn lex_comment(&mut self) -> Token {
         let start_span = self.cursor.span();
-        assert!(self.eat(LEFT_COMMENT_MARKER));
-        while !self.at_eof() && !self.at(RIGHT_COMMENT_MARKER) {
+        assert!(self.eat("/*"));
+        while !self.at_eof() && !self.at("*/") {
             self.cursor.bump();
         }
 
-        if !self.eat(RIGHT_COMMENT_MARKER) {
+        if !self.eat("*/") {
             self.add_diagnostic(
                 Diagnostic::error(self.file_id, "unclosed comment")
                     .primary(self.cursor.span(), "...but the file ends here")
@@ -309,7 +297,6 @@ impl<'src> Lexer<'src> {
     /// TODO: Emit more specific diagnostics.
     /// TODO: Support complex literals.
     fn lex_numeric_literal(&mut self) -> Token {
-        let start_pos = self.cursor.pos;
         self.eat(&['+', '-']);
         let base = if self.eat('0') {
             if self.eat(&['x', 'X']) {
@@ -325,7 +312,7 @@ impl<'src> Lexer<'src> {
             10
         };
 
-        self.cursor.bump_while(|c| c.to_digit(base as _).is_some());
+        self.cursor.bump_while(|c| c.to_digit(base).is_some());
         let has_decimal_point = self.eat('.');
         if has_decimal_point {
             self.cursor.bump_while(|c| c.to_digit(10).is_some());
