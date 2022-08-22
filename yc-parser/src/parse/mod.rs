@@ -30,23 +30,27 @@ impl<'src> Parser<'src> {
         todo!()
     }
 
-    fn at(&mut self, pat: impl TokenPattern) -> bool {
+    pub(crate) fn source(&self) -> &'src str {
+        self.cursor.source()
+    }
+
+    pub(crate) fn at(&mut self, pat: impl TokenPattern) -> bool {
         pat.matches(self.cursor.first())
     }
 
-    fn at_ignore_spaces(&mut self, pat: impl TokenPattern) -> bool {
+    pub(crate) fn at_ignore_spaces(&mut self, pat: impl TokenPattern) -> bool {
         pat.matches(self.cursor.first_non_space())
     }
 
-    fn nth_at(&mut self, n: usize, pat: impl TokenPattern) -> bool {
+    pub(crate) fn nth_at(&mut self, n: usize, pat: impl TokenPattern) -> bool {
         pat.matches(self.cursor.nth(n))
     }
 
-    fn nth_at_ignore_spaces(&mut self, n: usize, pat: impl TokenPattern) -> bool {
+    pub(crate) fn nth_at_ignore_spaces(&mut self, n: usize, pat: impl TokenPattern) -> bool {
         pat.matches(self.cursor.nth_non_space(n))
     }
 
-    fn eat(&mut self, pat: impl TokenPattern) -> bool {
+    pub(crate) fn eat(&mut self, pat: impl TokenPattern) -> bool {
         if pat.matches(self.cursor.first()) {
             self.cursor.bump();
             true
@@ -55,7 +59,7 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn eat_ignore_spaces(&mut self, pat: impl TokenPattern) -> bool {
+    pub(crate) fn eat_ignore_spaces(&mut self, pat: impl TokenPattern) -> bool {
         if pat.matches(self.cursor.first_non_space()) {
             self.cursor.bump();
             true
@@ -64,11 +68,11 @@ impl<'src> Parser<'src> {
         }
     }
 
-    fn add_diagnostic(&mut self, diagnostic: Diagnostic) {
+    pub(crate) fn add_diagnostic(&mut self, diagnostic: Diagnostic) {
         self.diagnostics.push(diagnostic);
     }
 
-    fn next_node_id(&mut self) -> NodeId {
+    pub(crate) fn next_node_id(&mut self) -> NodeId {
         self.node_id += 1;
         self.node_id
     }
