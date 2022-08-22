@@ -368,7 +368,7 @@ impl<'src> Lexer<'src> {
 
 /// A string pattern. Similar to [std::str::pattern::Pattern], but usable on
 /// stable Rust.
-pub(crate) trait StrPattern<'a>: Sized + Copy {
+trait StrPattern<'a>: Sized + Copy {
     /// Indicates whether the pattern matches at the start of the haystack.
     fn is_prefix_of(self, haystack: &'a str) -> bool;
 
