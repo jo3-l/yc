@@ -376,7 +376,7 @@ trait StrPattern<'a>: Sized + Copy {
     fn match_len(self) -> usize;
 }
 
-impl<'a, 'b> StrPattern<'a> for &'a str {
+impl<'a> StrPattern<'a> for &'a str {
     fn is_prefix_of(self, haystack: &'a str) -> bool {
         haystack.starts_with(self)
     }
