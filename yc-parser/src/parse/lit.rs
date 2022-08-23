@@ -80,13 +80,13 @@ impl<'src> Parser<'src> {
     fn error_invalid_number_syntax(&mut self, span: Span, err: lexical::Error) {
         use lexical::Error::*;
         let msg = match err {
-            Overflow(_) => format!("numeric overflow"),
-            Underflow(_) => format!("numeric underflow"),
-            InvalidDigit(_) => format!("invalid digit in numeric literal"),
-            EmptyMantissa(_) => format!("invalid empty mantissa"),
-            EmptyExponent(_) => format!("invalid empty exponent"),
+            Overflow(_) => "numeric overflow",
+            Underflow(_) => "numeric underflow",
+            InvalidDigit(_) => "invalid digit in numeric literal",
+            EmptyMantissa(_) => "invalid empty mantissa in numeric literal",
+            EmptyExponent(_) => "invalid empty exponent in numeric literal",
             // TODO: Provide specific errors for more cases.
-            _ => "invalid number syntax".to_string(),
+            _ => "invalid number syntax",
         };
         self.add_diagnostic(Diagnostic::error(self.file_id, msg).with_primary_span(span));
     }
