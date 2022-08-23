@@ -8,13 +8,13 @@ use crate::parse::{ParseState, Parser};
 
 impl Parser<'_> {
     pub(crate) fn parse_expr(&mut self, state: &mut ParseState) -> ParsedFragment<Expr> {
-        let start_pos = self.cursor.first_non_space().span.start;
-        let init_expr = self.parse_expr_no_pipeline(state, ExprParseMode::Greedy);
+        let start_pos = self.cursor.pos_ignore_spaces();
+        let init_expr = self.parse_non_pipeline_expr(state, ExprParseMode::Greedy);
 
         let mut calls = vec![];
         while self.eat_skip_spaces(TokenKind::Pipe) {
-            let call_start_pos = self.cursor.first_non_space().span.start;
-            let expr = self.parse_expr_no_pipeline(state, ExprParseMode::Greedy);
+            let call_start_pos = self.cursor.pos_ignore_spaces();
+            let expr = self.parse_non_pipeline_expr(state, ExprParseMode::Greedy);
             if let ParsedFragment::Present(Expr::FnCall(call)) = expr {
                 calls.push(call);
             } else {
@@ -37,7 +37,7 @@ impl Parser<'_> {
         }
     }
 
-    pub(crate) fn parse_expr_no_pipeline(
+    pub(crate) fn parse_non_pipeline_expr(
         &mut self,
         state: &mut ParseState,
         mode: ExprParseMode,
@@ -94,7 +94,7 @@ impl Parser<'_> {
             }
             _ => {
                 if !self.at_expr_terminator() {
-                    // Make sure we don't get stuck here.
+                    // Make sure we don't get stuck at this position.
                     self.cursor.bump_skip_spaces();
                 }
                 self.add_diagnostic(self.error_unexpected(tok, Some("an expression")));
@@ -177,6 +177,7 @@ impl Parser<'_> {
                         .with_primary_span(span),
                     );
                 }
+
                 return Expr::VarAssign(ast::VarAssignExpr {
                     id: self.next_node_id(),
                     span,
@@ -187,6 +188,7 @@ impl Parser<'_> {
                 let expr = self.parse_expr(state);
                 let span = var_name.span.with_end(self.cursor.pos());
                 state.defined_vars.push(var_name.val.clone()); // TODO: Can we avoid the clone?
+
                 return Expr::VarDecl(ast::VarDeclExpr {
                     id: self.next_node_id(),
                     span,
@@ -244,7 +246,7 @@ impl Parser<'_> {
             }
 
             if let ParsedFragment::Present(expr) =
-                self.parse_expr_no_pipeline(state, ExprParseMode::Lazy)
+                self.parse_non_pipeline_expr(state, ExprParseMode::Lazy)
             {
                 args.push(expr);
             }
