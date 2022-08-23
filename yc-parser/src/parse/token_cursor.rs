@@ -30,6 +30,10 @@ impl<'src> TokenCursor<'src> {
         self.nth(0)
     }
 
+    pub(crate) fn pos_ignore_spaces(&mut self) -> BytePos {
+        self.first_non_space().span.start
+    }
+
     pub(crate) fn first_non_space(&mut self) -> Token {
         self.nth_non_space(0)
     }
