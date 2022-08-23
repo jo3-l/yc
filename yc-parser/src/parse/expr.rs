@@ -4,7 +4,8 @@ use yc_ast::parsed_fragment::ParsedFragment;
 use yc_ast::token::{Token, TokenKind};
 use yc_diagnostics::Diagnostic;
 
-use crate::parse::{ParseState, Parser};
+use crate::parse::state::ParseState;
+use crate::parse::Parser;
 
 impl Parser<'_> {
     pub(crate) fn parse_expr(&mut self, state: &mut ParseState) -> ParsedFragment<Expr> {
@@ -168,7 +169,7 @@ impl Parser<'_> {
             if self.eat_skip_spaces(TokenKind::Assign) {
                 let expr = self.parse_expr(state);
                 let span = var_name.span.with_end(self.cursor.pos());
-                if !state.defined_vars.contains(&var_name.val) {
+                if !state.is_var_defined(&var_name.val) {
                     self.add_diagnostic(
                         Diagnostic::error(
                             self.file_id,
@@ -187,7 +188,7 @@ impl Parser<'_> {
             } else if self.eat_skip_spaces(TokenKind::Declare) {
                 let expr = self.parse_expr(state);
                 let span = var_name.span.with_end(self.cursor.pos());
-                state.defined_vars.push(var_name.val.clone()); // TODO: Can we avoid the clone?
+                state.push_var(&var_name.val); // TODO: Can we avoid the clone?
 
                 return Expr::VarDecl(ast::VarDeclExpr {
                     id: self.next_node_id(),
@@ -198,7 +199,7 @@ impl Parser<'_> {
             }
         }
 
-        if !state.defined_vars.contains(&var_name.val) {
+        if !state.is_var_defined(&var_name.val) {
             self.add_diagnostic(
                 Diagnostic::error(
                     self.file_id,

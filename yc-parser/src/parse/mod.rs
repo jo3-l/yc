@@ -1,6 +1,7 @@
 mod action;
 mod expr;
 mod lit;
+mod state;
 mod token_cursor;
 
 use yc_ast::ast;
@@ -126,10 +127,4 @@ impl<'a, const N: usize> TokenPattern for &'a [TokenKind; N] {
     fn matches(self, token: Token) -> bool {
         self.contains(&token.kind)
     }
-}
-
-#[derive(Clone, Debug, Default)]
-pub(crate) struct ParseState {
-    defined_vars: Vec<String>,
-    loop_depth: usize,
 }
