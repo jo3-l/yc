@@ -471,7 +471,7 @@ pub struct FieldAccessOrMethodCallExpr {
     pub id: NodeId,
     pub span: Span,
     pub obj: SelectorTarget,
-    pub selector: ParsedFragment<String>,
+    pub selector: ParsedFragment<Ident>,
     pub call_args: Vec<Expr>,
 }
 
