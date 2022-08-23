@@ -37,9 +37,12 @@ pub(crate) struct Scope {
 impl Scope {
     fn new(orig_stack_depth: usize) -> Self {
         Self {
-			orig_stack_depth,
-			bomb: DropBomb::new("`Scope::exit()` must be called explicitly to prevent leaking variables into outer scopes")
-		}
+            orig_stack_depth,
+            bomb: DropBomb::new(
+                "`Scope::exit()` must be called explicitly \
+                to prevent leaking variables into outer scopes",
+            ),
+        }
     }
 
     pub(crate) fn exit(&mut self, state: &mut ParseState) {
@@ -58,10 +61,13 @@ pub(crate) struct Loop {
 impl Loop {
     fn new(orig_loop_depth: usize, orig_stack_depth: usize) -> Self {
         Self {
-			orig_loop_depth,
-			orig_stack_depth,
-			bomb: DropBomb::new("`Loop::exit()` must be called explicitly to prevent leaking variables into outer scopes"),
-		}
+            orig_loop_depth,
+            orig_stack_depth,
+            bomb: DropBomb::new(
+                "`Loop::exit()` must be called explicitly \
+                to prevent leaking variables into outer scopes",
+            ),
+        }
     }
 
     pub(crate) fn exit(mut self, state: &mut ParseState) {
