@@ -38,7 +38,7 @@ impl Parser<'_> {
         }
     }
 
-    pub(crate) fn parse_non_pipeline_expr(
+    fn parse_non_pipeline_expr(
         &mut self,
         state: &mut ParseState,
         mode: ExprParseMode,
@@ -117,7 +117,7 @@ impl Parser<'_> {
         }
     }
 
-    pub(crate) fn parse_trailing_field_access_or_method_call(
+    fn parse_trailing_field_access_or_method_call(
         &mut self,
         state: &mut ParseState,
         mode: ExprParseMode,
@@ -162,7 +162,7 @@ impl Parser<'_> {
         }
     }
 
-    pub(crate) fn parse_var_expr(&mut self, state: &mut ParseState, mode: ExprParseMode) -> Expr {
+    fn parse_var_expr(&mut self, state: &mut ParseState, mode: ExprParseMode) -> Expr {
         let var_name = self.must_eat_skip_spaces(TokenKind::Variable);
         let var_name = self.tok_to_var_name(var_name);
         if mode == ExprParseMode::Greedy {
@@ -215,11 +215,7 @@ impl Parser<'_> {
         })
     }
 
-    pub(crate) fn parse_fn_call(
-        &mut self,
-        state: &mut ParseState,
-        mode: ExprParseMode,
-    ) -> ast::FnCallExpr {
+    fn parse_fn_call(&mut self, state: &mut ParseState, mode: ExprParseMode) -> ast::FnCallExpr {
         let name = self.must_eat_skip_spaces(TokenKind::Ident);
         let name = self.tok_to_ident(name);
         let args = if mode == ExprParseMode::Greedy {
@@ -281,7 +277,7 @@ impl Parser<'_> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) enum ExprParseMode {
+enum ExprParseMode {
     /// Parse as many tokens as possible to form an expression, but stop at a
     /// pipe. For example, parsing `$x := 1 | fn $y` greedily would yield a
     /// declaration `$x := 1`.
