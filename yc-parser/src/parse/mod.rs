@@ -32,8 +32,28 @@ impl<'src> Parser<'src> {
         todo!()
     }
 
-    pub(crate) fn source(&self) -> &'src str {
+    pub fn source(&self) -> &'src str {
         self.cursor.source()
+    }
+
+    pub(crate) fn error_unexpected(
+        &self,
+        tok: Token,
+        expected: Option<impl Into<String>>,
+    ) -> Diagnostic {
+        let msg = match expected {
+            Some(expected) => format!(
+                "expected {} but instead found {}",
+                expected.into(),
+                tok.kind.describe()
+            ),
+            None => format!("unexpected token {}", tok.kind.describe()),
+        };
+        let mut err = Diagnostic::error(self.file_id, msg).with_primary_span(tok.span);
+        if tok.kind == TokenKind::Comment {
+            err = err.with_footer_note("note: comments cannot be inserted inside other actions");
+        }
+        err
     }
 
     pub(crate) fn at(&mut self, pat: impl TokenPattern) -> bool {
@@ -61,13 +81,25 @@ impl<'src> Parser<'src> {
         }
     }
 
-    pub(crate) fn eat_ignore_spaces(&mut self, pat: impl TokenPattern) -> bool {
+    pub(crate) fn must_eat(&mut self, pat: impl TokenPattern) -> Token {
+        let tok = self.cursor.first();
+        assert!(self.eat(pat));
+        tok
+    }
+
+    pub(crate) fn eat_skip_spaces(&mut self, pat: impl TokenPattern) -> bool {
         if pat.matches(self.cursor.first_non_space()) {
             self.cursor.bump();
             true
         } else {
             false
         }
+    }
+
+    pub(crate) fn must_eat_skip_spaces(&mut self, pat: impl TokenPattern) -> Token {
+        let tok = self.cursor.first_non_space();
+        assert!(self.eat_skip_spaces(pat));
+        tok
     }
 
     pub(crate) fn add_diagnostic(&mut self, diagnostic: Diagnostic) {

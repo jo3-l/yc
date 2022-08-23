@@ -1,23 +1,32 @@
 use std::fmt::Display;
-use std::str::CharIndices;
 
 use indoc::indoc;
 use lexical::format::GO_LITERAL;
 use yc_ast::ast;
 use yc_ast::location::{BytePos, Span};
 use yc_ast::parsed_fragment::ParsedFragment;
-use yc_ast::token::Token;
+use yc_ast::token::{Token, TokenKind};
 use yc_diagnostics::Diagnostic;
 
 use crate::parse::Parser;
 
 impl<'src> Parser<'src> {
-    pub(crate) fn parse_bool_lit(&mut self, tok: Token) -> ast::BoolLit {
+    pub(crate) fn parse_nil_lit(&mut self) -> ast::NilLit {
+        let tok = self.must_eat_skip_spaces(TokenKind::Nil);
+        ast::NilLit {
+            id: self.next_node_id(),
+            span: tok.span,
+        }
+    }
+
+    pub(crate) fn parse_bool_lit(&mut self) -> ast::BoolLit {
+        let tok = self.must_eat_skip_spaces(TokenKind::BoolLit);
         let val = match &self.source()[tok.span.as_range()] {
             "true" => true,
             "false" => false,
             src => panic!("unexpected bool lit token value: {src}"),
         };
+
         ast::BoolLit {
             id: self.next_node_id(),
             span: tok.span,
@@ -25,9 +34,10 @@ impl<'src> Parser<'src> {
         }
     }
 
-    pub(crate) fn parse_raw_string_lit(&mut self, tok: Token) -> ast::StringLit {
-        let inner_val_start_pos = tok.span.start + 1; // Ignore the opening delimiter.
-        let inner_val_end_pos = if self.source()[tok.span.as_range()].ends_with('`') {
+    pub(crate) fn parse_raw_string_lit(&mut self) -> ast::StringLit {
+        let tok = self.must_eat_skip_spaces(TokenKind::RawStringLit);
+        let inner_start_pos = tok.span.start + 1; // Ignore the opening delimiter.
+        let inner_end_pos = if self.source()[tok.span.as_range()].ends_with('`') {
             // Ignore the closing delimiter.
             tok.span.end - 1
         } else {
@@ -35,16 +45,17 @@ impl<'src> Parser<'src> {
             // emitted a relevant diagnostic.
             tok.span.end
         };
+
         ast::StringLit {
             id: self.next_node_id(),
             span: tok.span,
             kind: ast::StringLitKind::Raw,
-            val: self.source()[inner_val_start_pos.as_usize()..inner_val_end_pos.as_usize()]
-                .to_string(),
+            val: self.source()[inner_start_pos.as_usize()..inner_end_pos.as_usize()].to_string(),
         }
     }
 
-    pub(crate) fn parse_float_lit(&mut self, tok: Token) -> ParsedFragment<ast::FloatLit> {
+    pub(crate) fn parse_float_lit(&mut self) -> ParsedFragment<ast::FloatLit> {
+        let tok = self.must_eat_skip_spaces(TokenKind::FloatLit);
         let parsed = lexical::parse_with_options::<f64, _, GO_LITERAL>(
             &self.source()[tok.span.as_range()],
             &lexical::ParseFloatOptions::default(),
@@ -62,7 +73,8 @@ impl<'src> Parser<'src> {
         }
     }
 
-    pub(crate) fn parse_int_lit(&mut self, tok: Token) -> ParsedFragment<ast::IntLit> {
+    pub(crate) fn parse_int_lit(&mut self) -> ParsedFragment<ast::IntLit> {
+        let tok = self.must_eat_skip_spaces(TokenKind::IntLit);
         let parsed = lexical::parse::<i64, _>(&self.source()[tok.span.as_range()]);
         match parsed {
             Ok(parsed) => ParsedFragment::Present(ast::IntLit {
@@ -91,17 +103,19 @@ impl<'src> Parser<'src> {
         self.add_diagnostic(Diagnostic::error(self.file_id, msg).with_primary_span(span));
     }
 
-    pub(crate) fn parse_char_lit(&mut self, tok: Token) -> ParsedFragment<ast::CharLit> {
+    pub(crate) fn parse_char_lit(&mut self) -> ParsedFragment<ast::CharLit> {
+        let tok = self.must_eat_skip_spaces(TokenKind::CharLit);
         let open_delim_span = Span::new(tok.span.start, tok.span.start + 1);
+
         // Ignore the opening delimiter.
-        let inner_val_span = Span::new(open_delim_span.end, tok.span.end);
-        let mut inner_val = self.source()[inner_val_span.as_range()]
+        let inner_span = Span::new(open_delim_span.end, tok.span.end);
+        let mut it = self.source()[inner_span.as_range()]
             .char_indices()
             // Adjust the offset so it corresponds to the position in the
             // original source code.
-            .map(|(offset, c)| (inner_val_span.start + offset, c));
+            .map(|(offset, c)| (inner_span.start + offset, c));
 
-        self.read_char(&mut inner_val, ReadCharContext::CharLit, open_delim_span)
+        self.read_char(&mut it, ReadCharContext::CharLit, open_delim_span)
             .ok()
             .map(|c| ast::CharLit {
                 id: self.next_node_id(),
@@ -111,33 +125,28 @@ impl<'src> Parser<'src> {
             .into()
     }
 
-    pub(crate) fn parse_quoted_string_lit(&mut self, tok: Token) -> ast::StringLit {
+    pub(crate) fn parse_quoted_string_lit(&mut self) -> ast::StringLit {
+        let tok = self.must_eat_skip_spaces(TokenKind::QuotedStringLit);
         let open_delim_span = Span::new(tok.span.start, tok.span.start + 1);
-        let inner_val_span = Span::new(open_delim_span.end, tok.span.end);
-        let mut inner_val = self.source()[inner_val_span.as_range()]
-            .char_indices()
-            .map(|(offset, c)| (inner_val_span.start + offset, c));
 
-        let mut content = String::new();
-        while inner_val
-            .clone()
-            .next()
-            .filter(|(_, c)| c != &'"')
-            .is_some()
-        {
-            if let Ok(c) = self.read_char(
-                &mut inner_val,
-                ReadCharContext::QuotedStringLit,
-                open_delim_span,
-            ) {
-                content.push(c);
+        let inner_span = Span::new(open_delim_span.end, tok.span.end);
+        let mut it = self.source()[inner_span.as_range()]
+            .char_indices()
+            .map(|(offset, c)| (inner_span.start + offset, c));
+
+        let mut parsed = String::new();
+        while it.clone().next().filter(|(_, c)| c != &'\'').is_some() {
+            if let Ok(c) =
+                self.read_char(&mut it, ReadCharContext::QuotedStringLit, open_delim_span)
+            {
+                parsed.push(c);
             }
         }
         ast::StringLit {
             id: self.next_node_id(),
             span: tok.span,
             kind: ast::StringLitKind::Interpreted,
-            val: content,
+            val: parsed,
         }
     }
 
@@ -169,10 +178,10 @@ impl<'src> Parser<'src> {
             return Ok(first_char);
         }
 
+        let mut clone = input.clone();
         // If there's no character after the backslash, then the string is
         // unterminated. Don't emit a diagnostic; the lexer should already have
         // done so.
-        let mut clone = input.clone();
         let (escaped_char_pos, escaped_char) = input.next().ok_or(())?;
         Ok(match escaped_char {
             'a' => '\x07',
@@ -218,9 +227,12 @@ impl<'src> Parser<'src> {
     {
         // TODO: Figure out how to avoid the allocation.
         let digits: Vec<_> = input
+            .clone()
             .take(kind.expected_digits())
             .map_while(|(offset, c)| c.to_digit(kind.digit_radix()).map(|digit| (offset, digit)))
             .collect();
+        input.nth(digits.len()); // TODO: Switch to advance_by when stabilized.
+
         let end_pos = digits.last().map_or(backslash_pos, |(pos, _)| *pos + 1);
         if digits.len() < kind.expected_digits() {
             self.add_diagnostic(

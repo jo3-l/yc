@@ -341,7 +341,7 @@ pub struct Comment {
 ///     FnCallExpr |
 ///     ExprPipeline |
 ///     VarAssignExpr |
-///     VarDefExpr |
+///     VarDeclExpr |
 ///     VarRefExpr .
 /// ```
 #[derive(Clone, Debug)]
@@ -358,7 +358,7 @@ pub enum Expr {
     FnCall(FnCallExpr),
     Pipeline(ExprPipeline),
     VarAssign(VarAssignExpr),
-    VarDef(VarDefExpr),
+    VarDecl(VarDeclExpr),
     VarRef(VarRefExpr),
 }
 
@@ -378,7 +378,7 @@ impl Expr {
             FnCall(ref call) => call.span,
             Pipeline(ref pipeline) => pipeline.span,
             VarAssign(ref assign) => assign.span,
-            VarDef(ref def) => def.span,
+            VarDecl(ref def) => def.span,
             VarRef(ref r#ref) => r#ref.span,
         }
     }
@@ -481,7 +481,7 @@ pub struct FieldAccessOrMethodCallExpr {
 #[derive(Clone, Debug)]
 pub enum SelectorTarget {
     Context,
-    Expr(Box<Expr>),
+    Expr(ParsedFragment<Box<Expr>>),
 }
 
 /// A variable assignment expression.
@@ -497,13 +497,13 @@ pub struct VarAssignExpr {
     pub expr: ParsedFragment<Box<Expr>>,
 }
 
-/// A variable definition expression.
+/// A variable declaration expression.
 ///
 /// ```text
-/// VarDefExpr = VarName ":=" Expr .
+/// VarDeclExpr = VarName ":=" Expr .
 /// ```
 #[derive(Clone, Debug)]
-pub struct VarDefExpr {
+pub struct VarDeclExpr {
     pub id: NodeId,
     pub span: Span,
     pub name: VarName,

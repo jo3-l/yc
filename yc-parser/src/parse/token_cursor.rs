@@ -1,5 +1,6 @@
 use std::collections::VecDeque;
 
+use yc_ast::location::BytePos;
 use yc_ast::token::{Token, TokenKind};
 
 use crate::lex::Lexer;
@@ -19,6 +20,10 @@ impl<'src> TokenCursor<'src> {
 
     pub(crate) fn source(&self) -> &'src str {
         self.lexer.source()
+    }
+
+    pub(crate) fn pos(&mut self) -> BytePos {
+        self.first().span.start
     }
 
     pub(crate) fn first(&mut self) -> Token {
