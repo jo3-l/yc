@@ -19,7 +19,7 @@ impl ParseState {
         self.loop_depth > 0
     }
 
-    pub(crate) fn is_var_defined(&self, var: &str) -> bool {
+    pub(crate) fn has_var(&self, var: &str) -> bool {
         self.var_stack.contains(&var.to_string())
     }
 

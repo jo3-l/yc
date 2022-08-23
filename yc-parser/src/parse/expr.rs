@@ -169,7 +169,7 @@ impl Parser<'_> {
             if self.eat_skip_spaces(TokenKind::Assign) {
                 let expr = self.parse_expr(state);
                 let span = var_name.span.with_end(self.cursor.pos());
-                if !state.is_var_defined(&var_name.val) {
+                if !state.has_var(&var_name.val) {
                     self.add_diagnostic(
                         Diagnostic::error(
                             self.file_id,
@@ -199,7 +199,7 @@ impl Parser<'_> {
             }
         }
 
-        if !state.is_var_defined(&var_name.val) {
+        if !state.has_var(&var_name.val) {
             self.add_diagnostic(
                 Diagnostic::error(
                     self.file_id,
