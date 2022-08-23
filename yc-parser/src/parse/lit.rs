@@ -169,9 +169,9 @@ impl<'src> Parser<'src> {
                         .with_secondary_label(open_delim_span, format!("the {ctx} starts here"));
                 if ctx == ReadCharContext::QuotedStringLit {
                     err = err.with_footer_note(indoc! {r#"
-						help: to create a newline, use the escape sequence `\n`
-							alternately, switch to a raw string literal and write newlines directly
-					"#});
+                        help: to create a newline, use the escape sequence `\n`
+                            alternately, switch to a raw string literal and write newlines directly
+                    "#});
                 }
                 self.add_diagnostic(err)
             }
