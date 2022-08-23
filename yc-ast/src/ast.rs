@@ -4,30 +4,12 @@ use crate::location::Span;
 use crate::node_id::NodeId;
 use crate::parsed_fragment::ParsedFragment;
 
-/// The root of the AST.
-///
-/// ```text
-/// Program = { Action | Comment } .
-/// ```
 #[derive(Clone, Debug)]
 pub struct Root {
     pub stmts: Vec<Action>,
     pub comments: Vec<Comment>,
 }
 
-/// A top-level action.
-///
-/// ```text
-/// Action = Text |
-///     BlockAction |
-///     ConditionalBranchAction |
-///     RangeAction |
-///     WhileAction |
-///     LoopControlAction |
-///     TryAction |
-///     ReturnAction |
-///     ExprAction .
-/// ````
 #[derive(Clone, Debug)]
 pub enum Action {
     Text(Text),
@@ -70,13 +52,6 @@ pub struct Text {
     pub content: String,
 }
 
-/// A `block` action.
-///
-/// ```text
-/// BlockAction = left_delim "block" StringLit [ Expr ] right_delim
-///     { Action }
-///     EndOfAction .
-/// ```
 #[derive(Clone, Debug)]
 pub struct BlockAction {
     pub id: NodeId,
@@ -88,13 +63,6 @@ pub struct BlockAction {
     pub end: ParsedFragment<EndOfAction>,
 }
 
-/// A `define` action.
-///
-/// ```text
-/// DefineAction = left_delim "define" StringLit right_delim
-///     { Action }
-///     EndOfAction .
-/// ```
 #[derive(Clone, Debug)]
 pub struct DefineAction {
     pub id: NodeId,
@@ -106,14 +74,6 @@ pub struct DefineAction {
     pub end: ParsedFragment<EndOfAction>,
 }
 
-/// A conditional branch, which is either an `if` action or a `with` action.
-///
-/// ```text
-/// ConditionalBranchAction = left_delim ( "if" | "with" ) Expr right_delim
-///     { Action }
-///     { ElseBranch }
-///     EndOfAction .
-/// ```
 #[derive(Clone, Debug)]
 pub struct ConditionalBranchAction {
     pub id: NodeId,
@@ -133,12 +93,6 @@ pub enum BranchKind {
     With,
 }
 
-/// An `else` or `else if` branch of a conditional action.
-///
-/// ```text
-/// ConditionalElseBranch = left_delim "else" [ "if" Expr ] right_delim
-///     { Action } .
-/// ```
 #[derive(Clone, Debug)]
 pub struct ConditionalElseBranch {
     pub id: NodeId,
@@ -149,17 +103,6 @@ pub struct ConditionalElseBranch {
     pub body: Vec<Action>,
 }
 
-/// A `range` action.
-///
-/// ```text
-/// RangeAction = left_delim "range" RangeInitializer right_delim
-///     { Action }
-///     [ LoopElseBranch ]
-///     EndOfAction .
-/// RangeInitializer = VarName "," VarName ( ":=" | "=" ) Expr |
-///     VarName ( ":=" | "=" ) Expr |
-///     Expr .
-/// ```
 #[derive(Clone, Debug)]
 pub struct RangeAction {
     pub id: NodeId,
@@ -174,14 +117,6 @@ pub struct RangeAction {
     pub end: ParsedFragment<EndOfAction>,
 }
 
-/// A `while` action.
-///
-/// ```text
-/// WhileAction = left_delim "while" Expr right_delim
-///     { Action }
-///     [ LoopElseBranch ]
-///     EndOfAction .
-/// ```
 #[derive(Clone, Debug)]
 pub struct WhileAction {
     pub id: NodeId,
@@ -194,12 +129,6 @@ pub struct WhileAction {
     pub end: ParsedFragment<EndOfAction>,
 }
 
-/// The optional `{{else}}` branch of a `{{range}}` or `{{while}}` action.
-///
-/// ```text
-/// LoopElseBranch = left_delim "else" right_delim
-///     { Action } .
-/// ```
 #[derive(Clone, Debug)]
 pub struct LoopElseBranch {
     pub id: NodeId,
@@ -208,11 +137,6 @@ pub struct LoopElseBranch {
     pub body: Vec<Action>,
 }
 
-/// A loop control action (either `{{break}}` or `{{continue}}`.)
-///
-/// ```text
-/// LoopControlAction = left_delim ( "break" | "continue" ) right_delim .
-/// ```
 #[derive(Clone, Debug)]
 pub struct LoopControlAction {
     pub id: NodeId,
@@ -227,15 +151,6 @@ pub enum LoopControlKind {
     Continue,
 }
 
-/// A `try` action.
-///
-/// ```text
-/// TryAction = left_delim "try" right_delim
-///     { Action }
-///     CatchAction
-///     { Action }
-///     EndOfAction .
-/// ```
 #[derive(Clone, Debug)]
 pub struct TryAction {
     pub id: NodeId,
@@ -248,11 +163,6 @@ pub struct TryAction {
     pub end: ParsedFragment<EndOfAction>,
 }
 
-/// A `{{catch}}` action.
-///
-/// ```text
-/// CatchAction = left_delim "catch" right_delim .
-/// ```
 #[derive(Clone, Debug)]
 pub struct CatchAction {
     pub id: NodeId,
@@ -260,11 +170,6 @@ pub struct CatchAction {
     pub trim_markers: TrimMarkers,
 }
 
-/// An `{{end}}` action.
-///
-/// ```text
-/// EndOfAction = left_delim "end" right_delim .
-/// ```
 #[derive(Clone, Debug)]
 pub struct EndOfAction {
     pub id: NodeId,
@@ -272,12 +177,6 @@ pub struct EndOfAction {
     pub trim_markers: TrimMarkers,
 }
 
-/// A `{{return}}` action. Return actions are permissible at the top level of a
-/// program and result in execution being terminated at that point.
-///
-/// ```text
-/// ReturnAction = left_delim "return" [ Expr ] right_delim .
-/// ```
 #[derive(Clone, Debug)]
 pub struct ReturnAction {
     pub id: NodeId,
@@ -286,12 +185,6 @@ pub struct ReturnAction {
     pub expr: Option<Expr>,
 }
 
-/// An action containing a single expression. For example, `{{add 1 1}}` is
-/// an `ExprAction`, as `add 1 1` is a `FnCallExpr`.
-///
-/// ```text
-/// ExprAction = left_delim Expr right_delim .
-/// ```
 #[derive(Clone, Debug)]
 pub struct ExprAction {
     pub id: NodeId,
@@ -301,14 +194,6 @@ pub struct ExprAction {
 }
 
 bitflags! {
-    /// Markers that configure trimming of output before and after an action.
-    ///
-    /// ```text
-    /// left_delim        = "{{" [ left_trim_marker ] .
-    /// right_delim       = "[ right_trim_marker ] "}}" .
-    /// left_trim_marker  = "- " .
-    /// right_trim_marker = " -" .
-    /// ```
     pub struct TrimMarkers: u8 {
         const LEFT = 1 << 0;
         const RIGHT = 1 << 1;
@@ -327,23 +212,6 @@ pub struct Comment {
     pub content: String,
 }
 
-/// An expression within an action.
-///
-/// ```text
-/// Expr = BoolLit |
-///     CharLit |
-///     FloatLit |
-///     IntLit |
-///     NilLit |
-///     StringLit |
-///     ContextAccessExpr |
-///     FieldAccessOrMethodCallExpr |
-///     FnCallExpr |
-///     ExprPipeline |
-///     VarAssignExpr |
-///     VarDeclExpr |
-///     VarRefExpr .
-/// ```
 #[derive(Clone, Debug)]
 pub enum Expr {
     BoolLit(BoolLit),
@@ -439,33 +307,18 @@ pub enum StringLitKind {
     Interpreted,
 }
 
-/// A nil literal.
-///
-/// ```text
-/// NilLit = "nil" .
-/// ```
 #[derive(Clone, Debug)]
 pub struct NilLit {
     pub id: NodeId,
     pub span: Span,
 }
 
-/// A context access expression.
-///
-/// ```text
-/// ContextAccessExpr = "." .
-/// ```
 #[derive(Clone, Debug)]
 pub struct ContextAccessExpr {
     pub id: NodeId,
     pub span: Span,
 }
 
-/// A field access or method call expression.
-///
-/// ```text
-/// FieldAccessOrMethodCallExpr = [ Expr ] "." ident { Expr } .
-/// ```
 #[derive(Clone, Debug)]
 pub struct FieldAccessOrMethodCallExpr {
     pub id: NodeId,
@@ -475,20 +328,12 @@ pub struct FieldAccessOrMethodCallExpr {
     pub call_args: Vec<Expr>,
 }
 
-/// The target of a selector expression. For example, the target of `(f arg0
-/// arg1).Y` is `(f arg0 arg1)`, whereas the target of `.Y` is the context
-/// value.
 #[derive(Clone, Debug)]
 pub enum SelectorTarget {
     Context,
     Expr(ParsedFragment<Box<Expr>>),
 }
 
-/// A variable assignment expression.
-///
-/// ```text
-/// VarAssignExpr = VarName "=" Expr .
-/// ```
 #[derive(Clone, Debug)]
 pub struct VarAssignExpr {
     pub id: NodeId,
@@ -497,11 +342,6 @@ pub struct VarAssignExpr {
     pub expr: ParsedFragment<Box<Expr>>,
 }
 
-/// A variable declaration expression.
-///
-/// ```text
-/// VarDeclExpr = VarName ":=" Expr .
-/// ```
 #[derive(Clone, Debug)]
 pub struct VarDeclExpr {
     pub id: NodeId,
@@ -510,11 +350,6 @@ pub struct VarDeclExpr {
     pub expr: ParsedFragment<Box<Expr>>,
 }
 
-/// A reference to a variable.
-///
-/// ```text
-/// VarRefExpr = VarName .
-/// ```
 #[derive(Clone, Debug)]
 pub struct VarRefExpr {
     pub id: NodeId,
@@ -522,22 +357,12 @@ pub struct VarRefExpr {
     pub name: VarName,
 }
 
-/// A variable name.
-///
-/// ```text
-/// VarName = "$" ident .
-/// ```
 #[derive(Clone, Debug)]
 pub struct VarName {
     pub span: Span,
     pub val: String,
 }
 
-/// A call expression.
-///
-/// ```text
-/// FnCallExpr = ident { Expr } .
-/// ```
 #[derive(Clone, Debug)]
 pub struct FnCallExpr {
     pub id: NodeId,
@@ -546,19 +371,12 @@ pub struct FnCallExpr {
     pub args: Vec<Expr>,
 }
 
-/// An alphanumeric identifier.
 #[derive(Clone, Debug)]
 pub struct Ident {
     pub span: Span,
     pub val: String,
 }
 
-/// A pipeline of expressions.
-///
-/// ```text
-/// ExprPipeline  = Expr PipelineStage { PipelineStage } .
-/// PipelineStage = "|" FnCallExpr .
-/// ```
 #[derive(Clone, Debug)]
 pub struct ExprPipeline {
     pub id: NodeId,
