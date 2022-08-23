@@ -189,7 +189,7 @@ pub struct ReturnAction {
 pub struct ExprAction {
     pub id: NodeId,
     pub span: Span,
-    pub expr: Expr,
+    pub expr: ParsedFragment<Expr>,
     pub trim_markers: TrimMarkers,
 }
 
